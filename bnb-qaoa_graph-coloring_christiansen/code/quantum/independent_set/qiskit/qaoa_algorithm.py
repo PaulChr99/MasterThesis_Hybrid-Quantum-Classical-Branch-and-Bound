@@ -128,12 +128,12 @@ def main():
     end_time = time.time()
     print(f"Elapsed time: {end_time - start_time}")
 
-"""
+
 if __name__ == "__main__":
     main()
 
 
-
+"""
 Since the order of items is reversed in qiskit, this "false" sorting is still active in
 the probabilities dict.
 """

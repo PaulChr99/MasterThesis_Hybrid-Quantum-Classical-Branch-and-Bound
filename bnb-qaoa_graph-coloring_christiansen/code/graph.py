@@ -69,7 +69,9 @@ class GraphRelatedFunctions:
         return Graph(vertices = graph.vertices, edges = complement_edges)
 
 
-exemplary_gc_instances = {
-    "A": Graph([1,2], [(1,2)]),
-    "B": Graph([1,2,3,4], [(1,2), (2,3), (3,4)])
+exemplary_graph_instances = {
+    "A": Graph([1], []),
+    "B": Graph([1,2], [(1,2)]),
+    "C": Graph([1,2,3,4], [(1,2), (2,3), (3,4)]),
+    "D": Graph([1,2,3,4,5,6], [(1,2), (1,4), (1,6), (2,3), (2,6), (3,4), (4,5), (5,6)])
 }

@@ -1,4 +1,4 @@
-from graph import Graph, GraphRelatedFunctions, exemplary_gc_instances
+from graph import Graph, GraphRelatedFunctions, exemplary_graph_instances
 
 
 class GraphColoring(GraphRelatedFunctions):

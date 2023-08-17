@@ -1,14 +1,16 @@
+import sys
+sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\common-utils")
+
 import math
 from typing import Union, Dict
+import time
 
-from graph import Graph, GraphRelatedFunctions
+from graph import Graph, GraphRelatedFunctions, exemplary_graph_instances
 from classical_ingredients import DSatur, BranchingSearchingBacktracking, FeasibilityAndPruning
-from qaoa.graph_coloring.circuits_gc import QAOACircuitGC
-from qaoa.graph_coloring.qaoa_algorithm import QAOAGC
-from qaoa.max_clique.circuits_mc import QAOACircuitMC
-from qaoa.max_clique.qaoa_algorithm import QAOAMC
-from qaoa.independent_set.circuits_is import QAOACircuitIS
-from qaoa.independent_set.qaoa_algorithm import QAOAIS
+from quantum.graph_coloring.cpp_inspired.analysis import QAOAGraphColoring
+from quantum.max_clique.cpp_inspired.analysis import QAOAMaxClique
+from quantum.independent_set.cpp_inspired.analysis import QAOAMaxIndependentSet
+
 
 
 class BranchAndBound(DSatur, BranchingSearchingBacktracking, FeasibilityAndPruning):
@@ -24,12 +26,14 @@ class BranchAndBound(DSatur, BranchingSearchingBacktracking, FeasibilityAndPruni
         return True if (len(incumbent) == 0) else False
 
 
-    def upper_bound(self, current_node: list, qaoa_gc_depth: Union[int, None], a_gc: Union[int, float, None], b_gc: Union[int, float, None]):
+    def upper_bound(self, current_node: list, qaoa_properties_gc: Dict[str, Union[int, float, None]]):
+        
+        if self.quantum_ub and (qaoa_properties_gc["depth"] == None or qaoa_properties_gc["penalty"] == None):
+            raise ValueError("Depth and penalty for GC QAOA must not be null when a quantum upper bound shall be computed.")
         
         def qaoa_gc_upper_bound():
             equivalent_subgraph = self.equivalent_subgraph(current_node)
-            circuit_for_subgraph = QAOACircuitGC(equivalent_subgraph, qaoa_gc_depth)
-            return QAOAGC(equivalent_subgraph, circuit_for_subgraph, a_gc, b_gc).execute_algorithm()
+            return QAOAGraphColoring(graph = equivalent_subgraph, depth = qaoa_properties_gc["depth"], penalty = qaoa_properties_gc["penalty"]).execute_qaoa_gc()
         
         upper_bound_by_degree = self.upper_bound_by_degree()
         dsatur_upper_bound = self.dsatur_upper_bound(current_node)
@@ -42,43 +46,49 @@ class BranchAndBound(DSatur, BranchingSearchingBacktracking, FeasibilityAndPruni
             return min(upper_bound_by_degree, dsatur_upper_bound, qaoa_gc_ub)
 
 
-    def lower_bound(self, current_node: list, qaoa_mc_depth: Union[int, None], a_mc: Union[int, float, None], 
-                    qaoa_is_depth: Union[int, None], a_is: Union[int, float, None], b_is: Union[int, float, None]):
+    def lower_bound(self, current_node: list, qaoa_properties_mc: Dict[str, Union[int, float, None]], qaoa_properties_is: Dict[str, Union[int, float, None]]):
         
+        if self.quantum_lb and (
+            qaoa_properties_mc["depth"] == None or qaoa_properties_mc["penalty"] == None or qaoa_properties_mc["penalty3"] == None 
+            or qaoa_properties_is["depth"] == None or qaoa_properties_is["penalty"] == None
+        ):
+            raise ValueError("Depths and penalties for MC and IS QAOAs must be specified if a quantum lower bound shall be computed.")
+
         hoffman_lower_bound = self.hoffman_lower_bound(current_node)
         print("Hoffman lower bound = ", hoffman_lower_bound)
-        equivalent_subgraph = self.equivalent_subgraph(current_node)
-
-        def qaoa_mc_lower_bound():
-            circuit_for_subgraph = QAOACircuitMC(equivalent_subgraph, qaoa_mc_depth)
-            return QAOAMC(equivalent_subgraph, circuit_for_subgraph, a_mc).execute_algorithm()
-
-        complement_subgraph = self.complement_graph(equivalent_subgraph)
-
-        def qaoa_is_lower_bound():
-            circuit_for_complement_subgraph = QAOACircuitIS(complement_subgraph, qaoa_is_depth)
-            return QAOAIS(complement_subgraph, circuit_for_complement_subgraph, a_is, b_is).execute_algorithm()
+        equivalent_subgraph = self.equivalent_subgraph(current_node) 
 
         if not self.quantum_lb:
             return hoffman_lower_bound
+        
         else:
             max_degree_of_subgraph = self.find_max_degree(equivalent_subgraph)
             d_subgraph = math.floor(math.log2(max_degree_of_subgraph + 1))
             relation_qubit_amounts = 1 + (d_subgraph + 1) / equivalent_subgraph.number_vertices
             gate_amount_comparing = 1/3 * equivalent_subgraph.number_vertices**2 + 1/3 * d_subgraph**2 + d_subgraph + 2/3 * equivalent_subgraph.number_vertices * d_subgraph + 2/3
+            complement_subgraph = self.complement_graph(equivalent_subgraph)
+            
             if complement_subgraph.number_edges > relation_qubit_amounts * gate_amount_comparing:
-                qaoa_mc_lb = qaoa_mc_lower_bound()
+                qaoa_mc_lb = QAOAMaxClique(
+                    graph = equivalent_subgraph, 
+                    depth = qaoa_properties_mc["depth"], 
+                    penalty = qaoa_properties_mc["penalty"], 
+                    penalty3 = qaoa_properties_mc["penalty3"]
+                ).execute_qaoa_mc()
                 print("QAOA Max Clique lower bound = ", qaoa_mc_lb)
                 return max(hoffman_lower_bound, qaoa_mc_lb)
+            
             else:
-                qaoa_is_lb = qaoa_is_lower_bound()
+                qaoa_is_lb = QAOAMaxIndependentSet(graph = complement_subgraph, depth = qaoa_properties_is["depth"], penalty = qaoa_properties_is["penalty"]).execute_qaoa_is()
                 print("QAOA Independent Set lower bound = ", qaoa_is_lb)
                 return max(hoffman_lower_bound, qaoa_is_lb)
 
 
-    def branch_and_bound_algorithm(self, qaoa_depth_dict: Dict[str, Union[int, None]] = {"depth_gc": None, "depth_mc": None, "depth_is": None}, 
-                                    a_dict: Dict[str, Union[int, float, None]] = {"a_gc": None, "a_mc": None, "a_is": None}, 
-                                    b_dict: Dict[str, Union[int, float, None]] = {"b_gc": None, "b_is": None}):
+    def branch_and_bound_algorithm(self, 
+            qaoa_properties_gc: Dict[str, Union[int, float, None]] = {"depth": None, "penalty": None},
+            qaoa_properties_mc: Dict[str, Union[int, float, None]] = {"depth": None, "penalty": None, "penalty3": None},
+            qaoa_properties_is: Dict[str, Union[int, float, None]] = {"depth": None, "penalty": None}
+        ):
         
         print("Ordered vertices = ", self.graph.vertices)
 
@@ -123,7 +133,7 @@ class BranchAndBound(DSatur, BranchingSearchingBacktracking, FeasibilityAndPruni
 
             # To avoid never arriving at any leaf, as long as no leaf has been found, nodes are only pruned
             # if current upper bound is strictly smaller (not \leq, see Latex) than best lower bound 
-            current_lower_bound = self.lower_bound(current_node, qaoa_depth_dict["depth_mc"], a_dict["a_mc"], qaoa_depth_dict["depth_is"], a_dict["a_is"], b_dict["b_is"])
+            current_lower_bound = self.lower_bound(current_node, qaoa_properties_mc, qaoa_properties_is)
             if self.quantum_lb:
                 qaoa_lb_counter += 1 
             if self.can_be_pruned(current_node, current_lower_bound, best_upper_bound, is_first_solution = self.is_first_solution(incumbent)):
@@ -135,7 +145,7 @@ class BranchAndBound(DSatur, BranchingSearchingBacktracking, FeasibilityAndPruni
 
             # Nodes can be further processed properly if being feasible, not being a leaf and not being prunable
             # In this case: best upper bound potentially updated, child nodes generated via branching, and next node selected
-            current_upper_bound = self.upper_bound(current_node, qaoa_depth_dict["depth_gc"], a_dict["a_gc"], b_dict["b_gc"])
+            current_upper_bound = self.upper_bound(current_node, qaoa_properties_gc)
             if self.quantum_ub:
                 qaoa_ub_counter += 1 
             #print("Current upper bound = ", current_upper_bound)
@@ -154,3 +164,24 @@ class BranchAndBound(DSatur, BranchingSearchingBacktracking, FeasibilityAndPruni
                     "number of QAOA executions for lower bounds": qaoa_lb_counter} 
         return result 
 
+
+
+
+def main():
+    graph = exemplary_graph_instances["C"]
+    qaoa_properties_gc = {"depth": 1, "penalty": 1.01}
+    
+    max_degree = GraphRelatedFunctions(graph).find_max_degree(graph)
+    penalty3_mc = 10**(-5)
+    penalty_mc = max_degree * penalty3_mc + 1 + penalty3_mc
+    qaoa_properties_mc = {"depth": 3, "penalty": penalty_mc, "penalty3": penalty3_mc}
+    
+    qaoa_properties_is = {"depth": 5, "penalty": 2}
+    
+    start_time = time.time()
+    print(BranchAndBound(graph, quantum_ub = True, quantum_lb = True).branch_and_bound_algorithm(qaoa_properties_gc, qaoa_properties_mc, qaoa_properties_is))
+    print("Elapsed time = ", time.time() - start_time)
+
+
+if __name__ == "__main__":
+    main()
