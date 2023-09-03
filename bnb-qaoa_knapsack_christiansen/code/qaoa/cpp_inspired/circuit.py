@@ -2,6 +2,10 @@ import sys
 sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\QuBRA\\bnb-qaoa_knapsack_christiansen\\code")
 sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\QuBRA\\bnb-qaoa_knapsack_christiansen\\configurations")
 
+sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\common-utils")
+sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\common-utils\\cpp-configuration")
+sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\common-utils\\quantum-gates")
+
 import itertools
 import numpy as np
 from numpy.typing import NDArray
@@ -11,6 +15,8 @@ from enum import Enum
 
 import kron_dot
 from knapsack_problem import KnapsackProblem, exemplary_kp_instances
+from single_qubit_gates import BasicGates, PhaseGates, PauliOperators
+from multiple_qubit_gates import ControlledGates
 
 
 class ControlledOn(Enum):
@@ -54,108 +60,10 @@ class AuxiliaryFunctions:
                 states_in_superposition.append(binary_variable_representation)
         return states_in_superposition
 
-
-
-class BasicGates:
-
-    num_type = np.cdouble
-    
-    def identity(self, register_size: int):
-        return np.identity(register_size, dtype = self.num_type)
-    
-    def projector_zero(self):
-        return np.array([[1, 0], [0, 0]], dtype = self.num_type)
-    
-    def projector_one(self):
-        return np.array([[0, 0], [0, 1]], dtype = self.num_type)
-    
-    def pauli_x(self):
-        return np.array([[0, 1], [1, 0]], dtype = self.num_type)
-    
-    def hadamard(self):
-        return 1/np.sqrt(2) * np.array([[1, 1], [1, -1]], dtype = self.num_type)
-    
-    def rotation_x(self, theta):
-        return np.array([[np.cos(theta/2), -1j * np.sin(theta/2)], [-1j * np.sin(theta/2), np.cos(theta/2)]], dtype = self.num_type)
-    
-    def single_phase_gate_zero(self, theta):
-        return np.array([[np.exp(1j * theta), 0], [0, 1]], dtype = self.num_type)
-    
-    def single_phase_gate_one(self, theta):
-        return np.array([[1, 0], [0, np.exp(1j * theta)]], dtype = self.num_type)
-    
-    def to_state_zero(self):
-        return np.array([[1, 1], [0, 0]], dtype = self.num_type)
-    
-    def to_state_one(self):
-        return np.array([[0, 0], [1, 1]], dtype = self.num_type)
-
-
-
-class ComposedGates(BasicGates):
-    
-    num_type = np.cdouble
-    
-    def apply_single_controlled_gate(self, target_index: int, control_index: int, single_qubit_gate, state, controlled_on_one: bool = True):
-        if target_index == control_index:
-            raise ValueError("Target and control qubits must not be equal.")
-        
-        tmp_control, tmp_rest = deepcopy(state), deepcopy(state) # We have two different operations acting on state, the controlled part and the other part
-
-        """ Application of the gate to be controlled """
-        if controlled_on_one:
-            kron_dot.kron_dot_dense(control_index, self.projector_one(), tmp_control)
-        else: 
-            kron_dot.kron_dot_dense(control_index, self.projector_zero(), tmp_control)
-        kron_dot.kron_dot_dense(target_index, single_qubit_gate, tmp_control) # As these operations commute, no distinction needed when control_index < target_index
-
-        """ Covering the rest of the Hilbert space, i.e. here only applying the other projector """
-        if controlled_on_one:
-            kron_dot.kron_dot_dense(control_index, self.projector_zero(), tmp_rest)
-        else:
-            kron_dot.kron_dot_dense(control_index, self.projector_one(), tmp_rest)
-        
-        """ Adding both results to end up with the state how it is fully transformed under the controlled operation """
-        state = tmp_control + tmp_rest
-        return state
-    
-    
-    def apply_multiple_controlled_gate(self, target_index: int, control_dict: List[Dict[str, Union[int, ControlledOn]]], 
-                                       single_qubit_gate: NDArray[num_type], state: NDArray[num_type]):
-        
-        if target_index in [control["control index"] for control in control_dict]:
-            raise ValueError("Target qubit cannot also be a control qubit.")
-        
-        """ Application of the gate to be controlled """
-        tmp_control = deepcopy(state)
-        for control in control_dict:
-            if control["controlled on"] == ControlledOn.one:
-                kron_dot.kron_dot_dense(control["control index"], self.projector_one(), tmp_control)
-            else:
-                kron_dot.kron_dot_dense(control["control index"], self.projector_zero(), tmp_control)
-        kron_dot.kron_dot_dense(target_index, single_qubit_gate, tmp_control) # Again the order of application does not matter
-
-        """ Covering the rest of the Hilbert space, i.e. every other combination of projectors """
-        control_combination = [1 if control["controlled on"] == ControlledOn.one else 0 for control in control_dict] # projector |1><1| is mapped to 1, |0><0| analogously to 0 
-        all_combinations = list(map(list, itertools.product([0, 1], repeat = len(control_dict))))
-        other_combinations =  [combi for combi in all_combinations if combi != control_combination]
-        if len(other_combinations) != 2**len(control_dict) - 1: # Only in exactly one case the single-qubit gate should be applied
-            raise ValueError("Check the computation of other combinations!")
-        tmp_rest_list = []
-        for combi in other_combinations:
-            tmp_rest = deepcopy(state)
-            for control_idx, control in enumerate(control_dict):
-                corresponding_projector = self.projector_one() if combi[control_idx] == 1 else self.projector_zero()
-                kron_dot.kron_dot_dense(control["control index"], corresponding_projector, tmp_rest)
-            tmp_rest_list.append(tmp_rest)
-
-        """ Adding all 2^{number of control indices} results to end up with the state how it is fully transformed under the controlled operation """
-        state = tmp_control + sum(tmp_rest_list)
-        return state
     
 
 
-class QFT(ComposedGates):
+class QFT(BasicGates, PhaseGates, ControlledGates):
 
     def __init__(self, problem_instance: KnapsackProblem, register_start: int, register_size: int):
         self.problem_instance = problem_instance
@@ -183,7 +91,7 @@ class QFT(ComposedGates):
     
 
 
-class Subtract(AuxiliaryFunctions, ComposedGates):
+class Subtract(AuxiliaryFunctions, PhaseGates, ControlledGates):
 
     num_type = np.cdouble
     
@@ -207,7 +115,7 @@ class Subtract(AuxiliaryFunctions, ComposedGates):
     
 
 
-class StatePreparation(AuxiliaryFunctions, ComposedGates):
+class StatePreparation(AuxiliaryFunctions, BasicGates, PauliOperators, ControlledGates):
 
     num_type = np.cdouble
     
@@ -301,7 +209,7 @@ class StatePreparation(AuxiliaryFunctions, ComposedGates):
 
 
 
-class Mixer(ComposedGates):
+class Mixer(PhaseGates, ControlledGates):
 
     num_type = np.cdouble
     
@@ -330,7 +238,7 @@ class Mixer(ComposedGates):
 
 
 
-class PhaseSeparator(BasicGates):
+class PhaseSeparator(PhaseGates):
 
     num_type = np.cdouble
     
@@ -346,7 +254,7 @@ class PhaseSeparator(BasicGates):
     
 
 
-class AdiabaticEvolution(AuxiliaryFunctions):
+class QuasiAdiabaticEvolution(AuxiliaryFunctions):
 
     num_type = np.cdouble
     
@@ -360,7 +268,7 @@ class AdiabaticEvolution(AuxiliaryFunctions):
         self.mixer = Mixer(self.problem_instance)
 
 
-    def apply_adiabatic_evolution(self, angles: List[Union[int, float]]):
+    def apply_quasiadiabatic_evolution(self, angles: List[Union[int, float]]):
         
         if len(angles) != 2 * self.depth:
             raise ValueError("Number of provided values for gamma and beta parameters need to be consistent with specified circuit depth.")
@@ -383,7 +291,7 @@ class AdiabaticEvolution(AuxiliaryFunctions):
         #print("state at beginning = ", state)
         """ Alternatingly apply phase separator and mixer """
         for j in range(self.depth):
-            state = self.phase_separator.apply_phase_separator(gamma_values[j], state)
+            state = self.phase_separator.apply_phase_separator(gamma_values[j], state) 
             #print("state after phase = ", state)
             #print("States in superposition after phase = ", self.find_superposition_for_state(state))
             state = self.mixer.apply_mixer(beta_values[j], state)
@@ -439,7 +347,7 @@ def main():
     #print(PhaseSeparator(problem).apply_phase_separator(1, state))
     depth = 1
     angles = [np.pi/4, np.pi/4]*depth
-    state = AdiabaticEvolution(problem, depth).apply_adiabatic_evolution(angles)
+    state = QuasiAdiabaticEvolution(problem, depth).apply_quasiadiabatic_evolution(angles)
     print(Measurement(problem).measure_state(state))
 
     state1 = np.zeros(2**5, dtype=num_type)
