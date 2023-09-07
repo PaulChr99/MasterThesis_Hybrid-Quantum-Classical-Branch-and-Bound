@@ -5,7 +5,7 @@ sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\Maste
 import numpy as np
 import time
 
-from circuit import QuasiAdiabaticEvolution
+from quantum.cpp_inspired.circuit import QuasiAdiabaticEvolution
 from knapsack_problem import KnapsackProblem, exemplary_kp_instances
 from qaoa import QAOA, ProblemType
 

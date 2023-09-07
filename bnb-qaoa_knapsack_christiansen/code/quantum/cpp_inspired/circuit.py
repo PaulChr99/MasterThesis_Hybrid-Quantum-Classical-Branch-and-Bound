@@ -1,7 +1,4 @@
 import sys
-sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\QuBRA\\bnb-qaoa_knapsack_christiansen\\code")
-sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\QuBRA\\bnb-qaoa_knapsack_christiansen\\configurations")
-
 sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\common-utils")
 sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\common-utils\\cpp-configuration")
 sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\common-utils\\quantum-gates")
@@ -15,7 +12,7 @@ from enum import Enum
 
 import kron_dot
 from knapsack_problem import KnapsackProblem, exemplary_kp_instances
-from single_qubit_gates import BasicGates, PhaseGates, PauliOperators
+from single_qubit_gates import Projectors, BasicGates, PauliOperators, PhaseGates
 from multiple_qubit_gates import ControlledGates
 
 
@@ -48,8 +45,7 @@ class AuxiliaryFunctions:
         if integer > self.problem_instance.capacity:
             raise ValueError("Integer to align with capacity register must not be larger than capacity.")
         binary_rep = list(map(int, reversed(bin(integer)[2:]))) # python starts from the most significant bit, i.e. in opposite direction to thesis
-        capacity_register_size = np.floor(np.log2(self.problem_instance.capacity)) + 1
-        difference = capacity_register_size - len(binary_rep) # may be 0
+        difference = self.capacity_register_size - len(binary_rep) # may be 0
         return binary_rep + [0]*int(difference)
     
     def find_superposition_for_state(self, state: NDArray[num_type]):
@@ -60,10 +56,49 @@ class AuxiliaryFunctions:
                 states_in_superposition.append(binary_variable_representation)
         return states_in_superposition
 
+
+# Applying a multiple controlled gate somehow is different to the version in the common-utils folder and breaking QAOA
+
+class ControlledGates2(Projectors):
+    
+    num_type = np.cdouble
+    
+    def apply_multiple_controlled_gate(self, target_index: int, control_dict: List[Dict[str, Union[int, ControlledOn]]], 
+                                       single_qubit_gate: NDArray[num_type], state: NDArray[num_type]):
+        
+        if target_index in [control["control index"] for control in control_dict]:
+            raise ValueError("Target qubit cannot also be a control qubit.")
+        
+        """ Application of the gate to be controlled """
+        tmp_control = deepcopy(state)
+        for control in control_dict:
+            if control["controlled on"] == ControlledOn.one:
+                kron_dot.kron_dot_dense(control["control index"], self.projector_one(), tmp_control)
+            else:
+                kron_dot.kron_dot_dense(control["control index"], self.projector_zero(), tmp_control)
+        kron_dot.kron_dot_dense(target_index, single_qubit_gate, tmp_control) # Again the order of application does not matter
+
+        """ Covering the rest of the Hilbert space, i.e. every other combination of projectors """
+        control_combination = [1 if control["controlled on"] == ControlledOn.one else 0 for control in control_dict] # projector |1><1| is mapped to 1, |0><0| analogously to 0 
+        all_combinations = list(map(list, itertools.product([0, 1], repeat = len(control_dict))))
+        other_combinations =  [combi for combi in all_combinations if combi != control_combination]
+        if len(other_combinations) != 2**len(control_dict) - 1: # Only in exactly one case the single-qubit gate should be applied
+            raise ValueError("Check the computation of other combinations!")
+        tmp_rest_list = []
+        for combi in other_combinations:
+            tmp_rest = deepcopy(state)
+            for control_idx, control in enumerate(control_dict):
+                corresponding_projector = self.projector_one() if combi[control_idx] == 1 else self.projector_zero()
+                kron_dot.kron_dot_dense(control["control index"], corresponding_projector, tmp_rest)
+            tmp_rest_list.append(tmp_rest)
+
+        """ Adding all 2^{number of control indices} results to end up with the state how it is fully transformed under the controlled operation """
+        state = tmp_control + sum(tmp_rest_list)
+        return state
     
 
 
-class QFT(BasicGates, PhaseGates, ControlledGates):
+class QFT(ControlledGates2, ControlledGates, BasicGates, PhaseGates):
 
     def __init__(self, problem_instance: KnapsackProblem, register_start: int, register_size: int):
         self.problem_instance = problem_instance
@@ -91,7 +126,7 @@ class QFT(BasicGates, PhaseGates, ControlledGates):
     
 
 
-class Subtract(AuxiliaryFunctions, PhaseGates, ControlledGates):
+class Subtract(AuxiliaryFunctions, ControlledGates2, ControlledGates, PhaseGates):
 
     num_type = np.cdouble
     
@@ -99,6 +134,7 @@ class Subtract(AuxiliaryFunctions, PhaseGates, ControlledGates):
         self.problem_instance = problem_instance
         self.register_start = register_start
         self.register_size = register_size
+        self.capacity_register_size = int(np.floor(np.log2(self.problem_instance.capacity)) + 1)
 
     def apply_controlled_subtraction(self, control_index: int, integer_to_subtract: int, state: NDArray[num_type]):
         binary_representation = self.binary_representation_for_capacity_register(abs(integer_to_subtract))
@@ -115,7 +151,7 @@ class Subtract(AuxiliaryFunctions, PhaseGates, ControlledGates):
     
 
 
-class StatePreparation(AuxiliaryFunctions, BasicGates, PauliOperators, ControlledGates):
+class StatePreparation(AuxiliaryFunctions, ControlledGates2, ControlledGates, PauliOperators, BasicGates):
 
     num_type = np.cdouble
     
@@ -209,7 +245,7 @@ class StatePreparation(AuxiliaryFunctions, BasicGates, PauliOperators, Controlle
 
 
 
-class Mixer(PhaseGates, ControlledGates):
+class Mixer(ControlledGates2, ControlledGates, PhaseGates):
 
     num_type = np.cdouble
     
@@ -238,7 +274,7 @@ class Mixer(PhaseGates, ControlledGates):
 
 
 
-class PhaseSeparator(PhaseGates):
+class PhaseSeparator(BasicGates, PhaseGates):
 
     num_type = np.cdouble
     
@@ -291,7 +327,7 @@ class QuasiAdiabaticEvolution(AuxiliaryFunctions):
         #print("state at beginning = ", state)
         """ Alternatingly apply phase separator and mixer """
         for j in range(self.depth):
-            state = self.phase_separator.apply_phase_separator(gamma_values[j], state) 
+            state = self.phase_separator.apply_phase_separator(gamma_values[j], state)
             #print("state after phase = ", state)
             #print("States in superposition after phase = ", self.find_superposition_for_state(state))
             state = self.mixer.apply_mixer(beta_values[j], state)
@@ -308,7 +344,7 @@ class Measurement(AuxiliaryFunctions):
 
     def __init__(self, problem_instance: KnapsackProblem):
         self.item_register_size = problem_instance.number_items
-        self.capacity_register_size = int(np.floor(np.log2(problem_instance.capacity)) + 1)
+        self.capacity_register_size = int(np.ceil(np.log2(problem_instance.capacity)))
     
     def measure_state(self, state: NDArray[num_type]):
         """ Measure both the item and the capacity register """
@@ -336,7 +372,7 @@ def main():
     state[0] = 1 # Corresponds to state |0,0,0,0,0>
     print(AuxiliaryFunctions(problem).find_binary_variable_representation_for_basis_state_index(np.where(state == 1)[0][0], item_reg_size + capacity_reg_size))
     con_dict = [{"control index": 3, "controlled on": ControlledOn.zero}, {"control index": 4, "controlled on": ControlledOn.zero}]
-    state = ComposedGates().apply_multiple_controlled_gate(target_index=2, control_dict=con_dict, single_qubit_gate=BasicGates().pauli_x(), state=state)
+    state = ControlledGates().apply_multiple_controlled_gate(target_index=2, control_dict=con_dict, single_qubit_gate=BasicGates().pauli_x(), state=state)
     print(state)
     print(AuxiliaryFunctions(problem).find_binary_variable_representation_for_basis_state_index(np.where(state == 1)[0][0], item_reg_size + capacity_reg_size))
     """

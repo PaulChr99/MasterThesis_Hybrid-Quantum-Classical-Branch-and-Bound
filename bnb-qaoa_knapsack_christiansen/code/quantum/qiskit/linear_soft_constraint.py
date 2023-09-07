@@ -9,8 +9,8 @@ from qiskit import transpile
 import time
 
 from knapsack_problem import KnapsackProblem, exemplary_kp_instances
-from circuits import LinQAOACircuit
-from simulate_and_optimize import Simulation, Optimization
+from quantum.qiskit.circuits import LinQAOACircuit
+from quantum.qiskit.simulate_and_optimize import Simulation, Optimization
 
 
 class AuxiliaryFunctions:

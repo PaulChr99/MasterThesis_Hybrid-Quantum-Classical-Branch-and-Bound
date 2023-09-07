@@ -68,7 +68,7 @@ class QAOA():
         state = self.apply_quasiadiabatic_evolution(angles)
         probs_dict = self.measurement.measure_state(state)
         expectation_value = self.get_expectation_value(probs_dict)
-        return - self.factor_for_optimization * expectation_value # Minus is needed for maximization due to Nelder-Mead optimization strategy and for minimization due to the sign-switched objective function
+        return - self.factor_for_optimization * expectation_value # Minus is needed for maximization due to Nelder-Mead optimization strategy
     
     def optimize(self):
         print("QAOA running...")
