@@ -1,6 +1,7 @@
 import sys
-sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\QuBRA\\bnb-qaoa_knapsack_christiansen\\code")
-sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\QuBRA\\bnb-qaoa_knapsack_christiansen\\configurations")
+sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\common-utils")
+sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\common-utils\\cpp-configuration")
+sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\common-utils\\quantum-gates")
 
 import itertools
 import numpy as np
@@ -11,6 +12,8 @@ from enum import Enum
 
 import kron_dot
 from knapsack_problem import KnapsackProblem, exemplary_kp_instances
+from single_qubit_gates import Projectors, BasicGates, PauliOperators, PhaseGates
+from multiple_qubit_gates import ControlledGates
 
 
 class ControlledOn(Enum):
@@ -42,8 +45,7 @@ class AuxiliaryFunctions:
         if integer > self.problem_instance.capacity:
             raise ValueError("Integer to align with capacity register must not be larger than capacity.")
         binary_rep = list(map(int, reversed(bin(integer)[2:]))) # python starts from the most significant bit, i.e. in opposite direction to thesis
-        capacity_register_size = np.floor(np.log2(self.problem_instance.capacity)) + 1
-        difference = capacity_register_size - len(binary_rep) # may be 0
+        difference = self.capacity_register_size - len(binary_rep) # may be 0
         return binary_rep + [0]*int(difference)
     
     def find_superposition_for_state(self, state: NDArray[num_type]):
@@ -55,70 +57,11 @@ class AuxiliaryFunctions:
         return states_in_superposition
 
 
+# Applying a multiple controlled gate somehow is different to the version in the common-utils folder and breaking QAOA
 
-class BasicGates:
-
-    num_type = np.cdouble
-    
-    def identity(self, register_size: int):
-        return np.identity(register_size, dtype = self.num_type)
-    
-    def projector_zero(self):
-        return np.array([[1, 0], [0, 0]], dtype = self.num_type)
-    
-    def projector_one(self):
-        return np.array([[0, 0], [0, 1]], dtype = self.num_type)
-    
-    def pauli_x(self):
-        return np.array([[0, 1], [1, 0]], dtype = self.num_type)
-    
-    def hadamard(self):
-        return 1/np.sqrt(2) * np.array([[1, 1], [1, -1]], dtype = self.num_type)
-    
-    def rotation_x(self, theta):
-        return np.array([[np.cos(theta/2), -1j * np.sin(theta/2)], [-1j * np.sin(theta/2), np.cos(theta/2)]], dtype = self.num_type)
-    
-    def single_phase_gate_zero(self, theta):
-        return np.array([[np.exp(1j * theta), 0], [0, 1]], dtype = self.num_type)
-    
-    def single_phase_gate_one(self, theta):
-        return np.array([[1, 0], [0, np.exp(1j * theta)]], dtype = self.num_type)
-    
-    def to_state_zero(self):
-        return np.array([[1, 1], [0, 0]], dtype = self.num_type)
-    
-    def to_state_one(self):
-        return np.array([[0, 0], [1, 1]], dtype = self.num_type)
-
-
-
-class ComposedGates(BasicGates):
+class ControlledGates2(Projectors):
     
     num_type = np.cdouble
-    
-    def apply_single_controlled_gate(self, target_index: int, control_index: int, single_qubit_gate, state, controlled_on_one: bool = True):
-        if target_index == control_index:
-            raise ValueError("Target and control qubits must not be equal.")
-        
-        tmp_control, tmp_rest = deepcopy(state), deepcopy(state) # We have two different operations acting on state, the controlled part and the other part
-
-        """ Application of the gate to be controlled """
-        if controlled_on_one:
-            kron_dot.kron_dot_dense(control_index, self.projector_one(), tmp_control)
-        else: 
-            kron_dot.kron_dot_dense(control_index, self.projector_zero(), tmp_control)
-        kron_dot.kron_dot_dense(target_index, single_qubit_gate, tmp_control) # As these operations commute, no distinction needed when control_index < target_index
-
-        """ Covering the rest of the Hilbert space, i.e. here only applying the other projector """
-        if controlled_on_one:
-            kron_dot.kron_dot_dense(control_index, self.projector_zero(), tmp_rest)
-        else:
-            kron_dot.kron_dot_dense(control_index, self.projector_one(), tmp_rest)
-        
-        """ Adding both results to end up with the state how it is fully transformed under the controlled operation """
-        state = tmp_control + tmp_rest
-        return state
-    
     
     def apply_multiple_controlled_gate(self, target_index: int, control_dict: List[Dict[str, Union[int, ControlledOn]]], 
                                        single_qubit_gate: NDArray[num_type], state: NDArray[num_type]):
@@ -155,7 +98,7 @@ class ComposedGates(BasicGates):
     
 
 
-class QFT(ComposedGates):
+class QFT(ControlledGates2, ControlledGates, BasicGates, PhaseGates):
 
     def __init__(self, problem_instance: KnapsackProblem, register_start: int, register_size: int):
         self.problem_instance = problem_instance
@@ -183,7 +126,7 @@ class QFT(ComposedGates):
     
 
 
-class Subtract(AuxiliaryFunctions, ComposedGates):
+class Subtract(AuxiliaryFunctions, ControlledGates2, ControlledGates, PhaseGates):
 
     num_type = np.cdouble
     
@@ -191,6 +134,7 @@ class Subtract(AuxiliaryFunctions, ComposedGates):
         self.problem_instance = problem_instance
         self.register_start = register_start
         self.register_size = register_size
+        self.capacity_register_size = int(np.floor(np.log2(self.problem_instance.capacity)) + 1)
 
     def apply_controlled_subtraction(self, control_index: int, integer_to_subtract: int, state: NDArray[num_type]):
         binary_representation = self.binary_representation_for_capacity_register(abs(integer_to_subtract))
@@ -207,7 +151,7 @@ class Subtract(AuxiliaryFunctions, ComposedGates):
     
 
 
-class StatePreparation(AuxiliaryFunctions, ComposedGates):
+class StatePreparation(AuxiliaryFunctions, ControlledGates2, ControlledGates, PauliOperators, BasicGates):
 
     num_type = np.cdouble
     
@@ -301,7 +245,7 @@ class StatePreparation(AuxiliaryFunctions, ComposedGates):
 
 
 
-class Mixer(ComposedGates):
+class Mixer(ControlledGates2, ControlledGates, PhaseGates):
 
     num_type = np.cdouble
     
@@ -330,7 +274,7 @@ class Mixer(ComposedGates):
 
 
 
-class PhaseSeparator(BasicGates):
+class PhaseSeparator(BasicGates, PhaseGates):
 
     num_type = np.cdouble
     
@@ -346,7 +290,7 @@ class PhaseSeparator(BasicGates):
     
 
 
-class AdiabaticEvolution(AuxiliaryFunctions):
+class QuasiAdiabaticEvolution(AuxiliaryFunctions):
 
     num_type = np.cdouble
     
@@ -360,7 +304,7 @@ class AdiabaticEvolution(AuxiliaryFunctions):
         self.mixer = Mixer(self.problem_instance)
 
 
-    def apply_adiabatic_evolution(self, angles: List[Union[int, float]]):
+    def apply_quasiadiabatic_evolution(self, angles: List[Union[int, float]]):
         
         if len(angles) != 2 * self.depth:
             raise ValueError("Number of provided values for gamma and beta parameters need to be consistent with specified circuit depth.")
@@ -400,7 +344,7 @@ class Measurement(AuxiliaryFunctions):
 
     def __init__(self, problem_instance: KnapsackProblem):
         self.item_register_size = problem_instance.number_items
-        self.capacity_register_size = int(np.floor(np.log2(problem_instance.capacity)) + 1)
+        self.capacity_register_size = int(np.ceil(np.log2(problem_instance.capacity)))
     
     def measure_state(self, state: NDArray[num_type]):
         """ Measure both the item and the capacity register """
@@ -428,7 +372,7 @@ def main():
     state[0] = 1 # Corresponds to state |0,0,0,0,0>
     print(AuxiliaryFunctions(problem).find_binary_variable_representation_for_basis_state_index(np.where(state == 1)[0][0], item_reg_size + capacity_reg_size))
     con_dict = [{"control index": 3, "controlled on": ControlledOn.zero}, {"control index": 4, "controlled on": ControlledOn.zero}]
-    state = ComposedGates().apply_multiple_controlled_gate(target_index=2, control_dict=con_dict, single_qubit_gate=BasicGates().pauli_x(), state=state)
+    state = ControlledGates().apply_multiple_controlled_gate(target_index=2, control_dict=con_dict, single_qubit_gate=BasicGates().pauli_x(), state=state)
     print(state)
     print(AuxiliaryFunctions(problem).find_binary_variable_representation_for_basis_state_index(np.where(state == 1)[0][0], item_reg_size + capacity_reg_size))
     """
@@ -439,7 +383,7 @@ def main():
     #print(PhaseSeparator(problem).apply_phase_separator(1, state))
     depth = 1
     angles = [np.pi/4, np.pi/4]*depth
-    state = AdiabaticEvolution(problem, depth).apply_adiabatic_evolution(angles)
+    state = QuasiAdiabaticEvolution(problem, depth).apply_quasiadiabatic_evolution(angles)
     print(Measurement(problem).measure_state(state))
 
     state1 = np.zeros(2**5, dtype=num_type)

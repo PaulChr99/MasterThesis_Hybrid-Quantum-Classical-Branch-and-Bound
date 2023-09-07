@@ -3,11 +3,11 @@ import numpy as np
 import math
 from typing import Union, Dict
 
-from knapsack_problem import KnapsackProblem
+from knapsack_problem import KnapsackProblem, exemplary_kp_instances
 from classical_ingredients import BranchingSearchingBacktracking, DynamicalSubproblems
-from qaoa.cpp_inspired.analysis import QAOA as HardQAOA
-from qaoa.qiskit.circuits import LinQAOACircuit
-from qaoa.qiskit.linear_soft_constraint import LinearSoftConstraintQAOA
+from quantum.cpp_inspired.analysis import QAOAKnapsack as HardQAOA
+from quantum.qiskit.circuits import LinQAOACircuit
+from quantum.qiskit.linear_soft_constraint import LinearSoftConstraintQAOA
 
 
 class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
@@ -27,16 +27,19 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
     branching: performing the next branching step, i.e. fixing the next item to be 
         either included or not
     """
-
-    def __init__(self, problem_instance: KnapsackProblem, quantum_soft: bool = False, quantum_hard: bool = False):
+    
+    
+    def __init__(self, problem_instance: KnapsackProblem, simulation: bool = False, quantum_hard: bool = False, quantum_soft: bool = False):
         BranchingSearchingBacktracking.__init__(self, problem_instance)
+        self.simulation = simulation
         self.quantum_soft, self.quantum_hard = quantum_soft, quantum_hard
-
-
-    def greedy_vs_qaoa(self, partial_choice: str, soft_qaoa_depth: Union[int, None], hard_qaoa_depth: Union[int, None]):
+        self.lb_simulation_raw_data = []
+    
+    def greedy_vs_qaoa(self, partial_choice: str, hard_qaoa_depth: Union[int, None], soft_qaoa_depth: Union[int, None]):
         
         greedy_lower_bound = self.greedy_lower_bound(partial_choice)
-        print("Greedy lower bound = ", greedy_lower_bound)
+        if not self.simulation: 
+            print("Greedy lower bound = ", greedy_lower_bound)
         
         offset = self.calculate_profit(partial_choice)
         residual_subproblem = self.partial_choice_to_subproblem(partial_choice)
@@ -64,7 +67,11 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
             return max(greedy_lower_bound, qaoa_lb)
         elif not self.quantum_soft and self.quantum_hard:
             qaoa_lb = hard_qaoa_lower_bound()
-            print("Hard QAOA lower bound = ", qaoa_lb)
+            if not self.simulation: 
+                print("Hard QAOA lower bound = ", qaoa_lb)
+            qubit_number_for_residual_subproblem = residual_subproblem.number_items + int(np.floor(np.log2(residual_subproblem.capacity)) + 1)
+            print("Residual subproblem qubit size = ", qubit_number_for_residual_subproblem)
+            self.lb_simulation_raw_data.append({"residual qubit size": qubit_number_for_residual_subproblem, "ratio": qaoa_lb / greedy_lower_bound})
             return max(greedy_lower_bound, qaoa_lb)
         elif self.quantum_soft and self.quantum_hard:
             soft_qaoa_lb = soft_qaoa_lower_bound()
@@ -76,9 +83,9 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
             return greedy_lower_bound
 
 
-    def branch_and_bound_algorithm(self, soft_qaoa_depth: Union[int, None] = None, hard_qaoa_depth: Union[int, None] = None):
+    def branch_and_bound_algorithm(self, hard_qaoa_depth: Union[int, None] = None, soft_qaoa_depth: Union[int, None] = None):
         
-        print("Problem with items sorted = ", KnapsackProblem(self.profits, self.weights, self.capacity))
+        #print("Problem with items sorted = ", KnapsackProblem(self.profits, self.weights, self.capacity))
 
         # Instantiate the algorithm
         stack = []
@@ -90,8 +97,9 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
 
         # Iterate until the stack of unexplored nodes is empty
         while stack:
-            print("stack = ", stack)
-            #print("current node = ", current_node)
+            if not self.simulation: 
+                print("stack = ", stack)
+                print("current node = ", current_node)
             counter += 1
 
             # Every node, i.e. (partial) solution, is first checked for feasibility
@@ -108,7 +116,7 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
             if self.calculate_residual_capacity(current_node) == 0:
                 leaf_counter += 1
                 optimal_candidate = self.complete_partial_choice(current_node)
-                print("optimal candidate = ", optimal_candidate)
+                #print("optimal candidate = ", optimal_candidate)
                 if len(incumbent) == 0:
                     incumbent = optimal_candidate
                     # Profit of current_node is same as profit of optimal_candidate since only added 0s
@@ -154,7 +162,7 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
             
             # Nodes can be further processed properly if being feasible, not being a leaf and not being prunable
             # In this case: best lower bound potentially updated, child nodes generated via branching, and next node selected
-            current_lower_bound = self.greedy_vs_qaoa(current_node, soft_qaoa_depth, hard_qaoa_depth)
+            current_lower_bound = self.greedy_vs_qaoa(current_node, hard_qaoa_depth, soft_qaoa_depth)
             if self.quantum_soft or self.quantum_hard:
                 qaoa_counter += 1
             if current_lower_bound > best_lower_bound:
@@ -173,3 +181,15 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
 Now everything seems to work properly. However, due to choosing the next node randomly (e.g. when not both of the candidates are feasible)
 the performance (i.e. number of explored nodes and reached leafs) may vary from one execution to another.
 """
+
+
+
+def main():
+    problem_instance = exemplary_kp_instances["C"]
+    bnb = BranchAndBound(problem_instance, simulation = True, quantum_hard = True)
+    print(bnb.branch_and_bound_algorithm(hard_qaoa_depth = 3))
+
+
+
+if __name__ == "__main__":
+    main()
