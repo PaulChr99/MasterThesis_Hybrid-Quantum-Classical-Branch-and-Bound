@@ -7,6 +7,8 @@ import scipy
 import scipy.optimize as opt
 from typing import List, Union
 import time
+import itertools
+import random
 
 from circuit import AdiabaticEvolution, Measurement
 from knapsack_problem import KnapsackProblem, exemplary_kp_instances
@@ -59,10 +61,9 @@ class QAOA(ProblemRelatedFunctions):
         print("QAOA running...")
         gamma_range = (0, 2 * np.pi)
         beta_range = (0, np.pi)
-        bounds_for_optimization = np.array([gamma_range, beta_range] * self.depth)
-        #bounds = opt.Bounds([gamma_range[0], beta_range[0]] * self.depth, [gamma_range[1], beta_range[1]] * self.depth)
-        bounds_cobyla = (gamma_range, beta_range) * self.depth
-        optimization_result = opt.minimize(fun = self.angles_to_value, x0 = [0]*(2*self.depth), method = "Nelder-Mead", bounds = bounds_cobyla)
+        bounds_neldermead_format = (gamma_range, beta_range) * self.depth
+        initial_guess = list(itertools.chain.from_iterable([[random.uniform(gamma_range[0], gamma_range[1])] + [random.uniform(beta_range[0], beta_range[1])] for _ in range(self.depth)]))
+        optimization_result = opt.minimize(fun = self.angles_to_value, x0 = initial_guess, method = "Nelder-Mead", bounds = bounds_neldermead_format)
         optimal_angles = optimization_result.x
         optimal_value = optimization_result.fun
         return {"optimal angles": optimal_angles, "optimal value": optimal_value}
