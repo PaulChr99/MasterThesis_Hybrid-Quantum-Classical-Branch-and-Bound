@@ -335,29 +335,6 @@ class QuasiAdiabaticEvolution(AuxiliaryFunctions):
             #print("States in superposition after mixer = ", self.find_superposition_for_state(state))
 
         return state
-    
-
-
-class Measurement(AuxiliaryFunctions):
-
-    num_type = np.cdouble
-
-    def __init__(self, problem_instance: KnapsackProblem):
-        self.item_register_size = problem_instance.number_items
-        self.capacity_register_size = int(np.ceil(np.log2(problem_instance.capacity)))
-    
-    def measure_state(self, state: NDArray[num_type]):
-        """ Measure both the item and the capacity register """
-        probs_dict = {}
-        for s in range(len(state)):
-            binary_variable_representation = self.find_binary_variable_representation_for_basis_state_index(s, self.item_register_size, self.capacity_register_size)
-            probability = np.abs(state[s])**2
-            probs_dict[f"{binary_variable_representation}"] = probability
-        
-        if not np.isclose(sum(probs_dict.values()), 1, rtol = 1e-05):
-            raise ValueError("Even with tolerance all single probabilities don't sum to one.")
-        
-        return probs_dict
         
         
 

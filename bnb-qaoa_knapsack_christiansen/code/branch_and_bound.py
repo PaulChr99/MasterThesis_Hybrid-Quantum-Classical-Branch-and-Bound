@@ -1,6 +1,6 @@
 from dataclasses import dataclass, fields
 import numpy as np
-import math
+import time
 from typing import Union, Dict
 
 from knapsack_problem import KnapsackProblem, exemplary_kp_instances
@@ -43,7 +43,7 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
         
         offset = self.calculate_profit(partial_choice)
         residual_subproblem = self.partial_choice_to_subproblem(partial_choice)
-        print("Residual subproblem = ", residual_subproblem)
+        #print("Residual subproblem = ", residual_subproblem)
         
         def soft_qaoa_lower_bound():
             circuit_for_subproblem = LinQAOACircuit(problem = residual_subproblem, p = soft_qaoa_depth)
@@ -58,7 +58,7 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
             return offset + qaoa_result
         
         def hard_qaoa_lower_bound():
-            qaoa_result = HardQAOA(problem_instance = residual_subproblem, depth = hard_qaoa_depth).execute_qaoa()
+            qaoa_result = HardQAOA(problem_instance = residual_subproblem, depth = hard_qaoa_depth).execute_qaoa()["qaoa result"]
             return offset + qaoa_result
         
         if self.quantum_soft and not self.quantum_hard:
@@ -69,9 +69,10 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
             qaoa_lb = hard_qaoa_lower_bound()
             if not self.simulation: 
                 print("Hard QAOA lower bound = ", qaoa_lb)
-            qubit_number_for_residual_subproblem = residual_subproblem.number_items + int(np.floor(np.log2(residual_subproblem.capacity)) + 1)
-            print("Residual subproblem qubit size = ", qubit_number_for_residual_subproblem)
-            self.lb_simulation_raw_data.append({"residual qubit size": qubit_number_for_residual_subproblem, "ratio": qaoa_lb / greedy_lower_bound})
+            if self.simulation:
+                qubit_number_for_residual_subproblem = residual_subproblem.number_items + int(np.ceil(np.log2(residual_subproblem.capacity)) + 1)
+                print("Residual subproblem qubit size = ", qubit_number_for_residual_subproblem)
+                self.lb_simulation_raw_data.append({"residual qubit size": qubit_number_for_residual_subproblem, "ratio": qaoa_lb / greedy_lower_bound})
             return max(greedy_lower_bound, qaoa_lb)
         elif self.quantum_soft and self.quantum_hard:
             soft_qaoa_lb = soft_qaoa_lower_bound()
@@ -99,7 +100,7 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
         while stack:
             if not self.simulation: 
                 print("stack = ", stack)
-                print("current node = ", current_node)
+                #print("current node = ", current_node)
             counter += 1
 
             # Every node, i.e. (partial) solution, is first checked for feasibility
@@ -185,9 +186,23 @@ the performance (i.e. number of explored nodes and reached leafs) may vary from 
 
 
 def main():
-    problem_instance = exemplary_kp_instances["C"]
-    bnb = BranchAndBound(problem_instance, simulation = True, quantum_hard = True)
-    print(bnb.branch_and_bound_algorithm(hard_qaoa_depth = 3))
+    problem_instance = exemplary_kp_instances["D"]
+    kp_instance_data = open(
+        "C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\bnb-qaoa_knapsack_christiansen\\code\\kp_instances_data\\uncorrelated\\1000.txt", 
+        "r"
+    ).readlines()
+    profits = [int(line.split()[0]) for line in kp_instance_data]
+    weights = [int(line.split()[1]) for line in kp_instance_data]
+    kp_instance = KnapsackProblem(
+        profits, 
+        weights, 
+        capacity = 1000 #int(np.ceil(1/100 * sum(weights)))
+    )
+    print("capacity = ", int(np.ceil(kp_instance.capacity)))
+    bnb = BranchAndBound(kp_instance)
+    start_time = time.time()
+    print(bnb.branch_and_bound_algorithm())
+    print("Elapsed time = ", time.time() - start_time)
 
 
 

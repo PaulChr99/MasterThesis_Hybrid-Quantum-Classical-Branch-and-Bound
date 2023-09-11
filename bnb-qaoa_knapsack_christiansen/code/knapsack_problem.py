@@ -61,7 +61,8 @@ class KnapsackProblem:
 
 
 exemplary_kp_instances = {
-    "A": KnapsackProblem(profits = [4, 1, 2], weights = [3, 1, 2], capacity = 3),
-    "B": KnapsackProblem(profits = [3, 1, 2, 1], weights = [1, 1, 2, 2], capacity = 4),
-    "C": KnapsackProblem(profits = [6, 5, 8, 9, 6, 7, 3], weights = [2, 3, 6, 7, 5, 9, 4], capacity = 9)
+    "A": KnapsackProblem(profits = [1, 2], weights = [1, 1], capacity = 2),
+    "B": KnapsackProblem(profits = [1, 4, 2], weights = [1, 3, 2], capacity = 3),
+    "C": KnapsackProblem(profits = [3, 1, 2, 1], weights = [1, 1, 2, 2], capacity = 4),
+    "D": KnapsackProblem(profits = [6, 5, 8, 9, 6, 7, 3], weights = [2, 3, 6, 7, 5, 9, 4], capacity = 9)
 }

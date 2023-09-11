@@ -93,4 +93,4 @@ class QAOA():
         expectation_value = self.get_expectation_value(probs_dict)
         if not np.isclose(expectation_value, optimized_expectation_value, rtol = 1e-05):
             raise ValueError("Even with tolerance the double-checked expectation value does not match the optimized value.")
-        return expectation_value
+        return {"qaoa result": expectation_value, "solution probabilities": probs_dict}
