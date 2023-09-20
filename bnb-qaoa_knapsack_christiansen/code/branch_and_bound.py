@@ -4,7 +4,7 @@ import time
 from typing import Union, Dict
 
 from knapsack_problem import KnapsackProblem, exemplary_kp_instances
-from classical_ingredients import BranchingSearchingBacktracking, DynamicalSubproblems
+from classical_ingredients import BranchingSearchingBacktracking, DynamicalSubproblems, SortingProfitsAndWeights, AuxiliaryFunctions, EvaluatingProfitsAndWeights, FeasibilityAndPruning
 from quantum.cpp_inspired.analysis import QAOAKnapsack as HardQAOA
 from quantum.qiskit.circuits import LinQAOACircuit
 from quantum.qiskit.linear_soft_constraint import LinearSoftConstraintQAOA
@@ -31,6 +31,7 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
     
     def __init__(self, problem_instance: KnapsackProblem, simulation: bool = False, quantum_hard: bool = False, quantum_soft: bool = False):
         BranchingSearchingBacktracking.__init__(self, problem_instance)
+        self.problem_instance = problem_instance
         self.simulation = simulation
         self.quantum_soft, self.quantum_hard = quantum_soft, quantum_hard
         self.lb_simulation_raw_data = []
@@ -131,11 +132,12 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
                 stack.remove(current_node)
                 if stack:
                     current_node = self.backtracking(stack)
-                continue
+                continue 
             
             # Computing bounds for (feasible) leafs is useless effort, so they are directly evaluated
             if len(current_node) == self.number_items:
                 leaf_counter += 1
+                #print("leaf = ", AuxiliaryFunctions.find_selected_items(current_node))
                 # No further checks are needed when arriving at first leave, will always become incumbent
                 if len(incumbent) == 0:
                     incumbent = current_node
@@ -150,11 +152,11 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
                 # Can only backtrack to another node if stack is not empty after removing
                 if stack:
                     current_node = self.backtracking(stack)
-                continue
+                continue 
             
             # To avoid never arriving at any leaf, as long as no leaf has been found, nodes are only pruned
             # if current upper bound is really smaller (not \leq, see Latex) than best lower bound 
-            if self.can_be_pruned(current_node, best_lower_bound, is_first_solution = True if (len(incumbent) == 0) else False):
+            if self.can_be_pruned(current_node, best_lower_bound, is_first_solution = True):
                 stack.remove(current_node)
                 # Can only backtrack to another node if stack is not empty after removing
                 if stack:
@@ -174,7 +176,10 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
             current_node = self.node_selection(stack) 
 
         optimal_solution, maximum_profit = incumbent, self.calculate_profit(incumbent)
-        result = {"optimal solution": optimal_solution, "maximum profit": maximum_profit, "number of explored nodes": counter, 
+        print("weight of optimal solution = ", self.calculate_weight(optimal_solution))
+        sorting_permutation = SortingProfitsAndWeights(self.profits, self.weights).sorting_permutation(self.problem_instance.profits, self.problem_instance.weights)
+        optimal_solution_original_sorting = "".join([list(optimal_solution)[sorting_permutation.index(idx)] for idx in range(len(sorting_permutation))])
+        result = {"optimal solution": optimal_solution_original_sorting, "maximum profit": maximum_profit, "number of explored nodes": counter, 
                     "number of leafs reached": leaf_counter, "number of qaoa executions": qaoa_counter} 
         return result
 
@@ -186,22 +191,29 @@ the performance (i.e. number of explored nodes and reached leafs) may vary from 
 
 
 def main():
-    problem_instance = exemplary_kp_instances["D"]
+    problem_instance = exemplary_kp_instances["B"]
     kp_instance_data = open(
-        "C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\bnb-qaoa_knapsack_christiansen\\code\\kp_instances_data\\uncorrelated\\1000.txt", 
+        "C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\bnb-qaoa_knapsack_christiansen\\code\\kp_instances_data\\uncorrelated\\10000.txt", 
         "r"
     ).readlines()
-    profits = [int(line.split()[0]) for line in kp_instance_data]
-    weights = [int(line.split()[1]) for line in kp_instance_data]
+    profits = [int(line.split()[0]) for line in kp_instance_data[1:-1]]
+    weights = [int(line.split()[1]) for line in kp_instance_data[1:-1]]
     kp_instance = KnapsackProblem(
         profits, 
         weights, 
-        capacity = 1000 #int(np.ceil(1/100 * sum(weights)))
+        capacity = int(kp_instance_data[0].split()[1]) #int(np.ceil(1/100 * sum(weights)))
     )
-    print("capacity = ", int(np.ceil(kp_instance.capacity)))
-    bnb = BranchAndBound(kp_instance)
+    print("capacity ratio = ", kp_instance.capacity / sum(kp_instance.weights))
+    #print("capacity = ", int(np.ceil(kp_instance.capacity)))
+    bnb = BranchAndBound(kp_instance, simulation=True)
     start_time = time.time()
-    print(bnb.branch_and_bound_algorithm())
+    bnb_result = bnb.branch_and_bound_algorithm()
+    print(bnb_result)
+    #print("Selected items of bnb solution = ", AuxiliaryFunctions.find_selected_items(bnb_result["optimal solution"]))
+    optimal_solution = kp_instance_data[-1].replace(" ", "")
+    print("Selected items of bnb solution equal to optimal solution = ", AuxiliaryFunctions.find_selected_items(bnb_result["optimal solution"]) == AuxiliaryFunctions.find_selected_items(optimal_solution))
+    print("Optimal solution value = ", EvaluatingProfitsAndWeights(kp_instance).calculate_profit(optimal_solution))
+    print("Weight of optimal solution = ", EvaluatingProfitsAndWeights(kp_instance).calculate_weight(optimal_solution))
     print("Elapsed time = ", time.time() - start_time)
 
 

@@ -4,6 +4,13 @@ import random
 from knapsack_problem import KnapsackProblem, exemplary_kp_instances
 
 
+class AuxiliaryFunctions:
+    
+    def find_selected_items(bitstring: str):
+        return [idx + 1 for idx, bit in enumerate(bitstring) if bit == "1"]
+
+
+
 class SortingProfitsAndWeights:
     """
     Class for sorting profits and weights according to the ratio of profit/weight in
@@ -22,8 +29,24 @@ class SortingProfitsAndWeights:
         self.weights = weights
 
     def sorting_profits_weights(self):
-        profits, weights = zip(*sorted(zip(self.profits, self.weights), reverse = True, key = lambda k: k[0]/k[1]))
-        return {"profits": profits, "weights": weights}
+        sorted_profits, sorted_weights = zip(*sorted(zip(self.profits, self.weights), reverse = True, key = lambda k: k[0]/k[1]))
+        return {"profits": sorted_profits, "weights": sorted_weights}
+    
+    def sorting_permutation(self, old_profits: list, old_weights: list):
+        old_profit_weight_tuples = [(old_profits[idx], old_weights[idx]) for idx in range(len(old_profits))]
+        new_profit_weight_tuples = [(self.profits[idx], self.weights[idx]) for idx in range(len(self.profits))]
+        sorting_permutation = []
+        for new_tuple in new_profit_weight_tuples:
+            first_occurrence = old_profit_weight_tuples.index(new_tuple)
+            if first_occurrence in sorting_permutation:
+                remaining_occurrences_of_tuple = [idx for idx in range(first_occurrence + 1, len(old_profits)) if old_profit_weight_tuples[idx] == new_tuple]
+                for occurrence_idx in remaining_occurrences_of_tuple:
+                    if occurrence_idx not in sorting_permutation:
+                        sorting_permutation.append(occurrence_idx)
+            else: 
+                sorting_permutation.append(first_occurrence)
+        return sorting_permutation
+    
 
 
 class EvaluatingProfitsAndWeights:
@@ -182,3 +205,27 @@ class BranchingSearchingBacktracking(FeasibilityAndPruning):
             raise ValueError("No further node to explore.")
         next_node = stack[-1]
         return next_node
+    
+
+
+
+def main():
+    kp_instance_data = open(
+        "C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\bnb-qaoa_knapsack_christiansen\\code\\kp_instances_data\\uncorrelated\\2000.txt", 
+        "r"
+    ).readlines()
+    profits = [int(line.split()[0]) for line in kp_instance_data[1:-1]]
+    weights = [int(line.split()[1]) for line in kp_instance_data[1:-1]]
+    sorted_profits_weights = SortingProfitsAndWeights(profits, weights).sorting_profits_weights()
+    sorted_profits = sorted_profits_weights["profits"]
+    sorted_weights = sorted_profits_weights["weights"]
+    sorting_permutation = SortingProfitsAndWeights(sorted_profits, sorted_weights).sorting_permutation(profits, weights)
+    #print("Sorting permutation = ", max(sorting_permutation))
+    for idx in range(len(sorting_permutation)):
+        if idx not in sorting_permutation:
+            print(idx)
+    
+
+
+if __name__ == "__main__":
+    main()
