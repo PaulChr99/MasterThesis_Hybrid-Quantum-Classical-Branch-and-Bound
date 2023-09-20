@@ -32,6 +32,7 @@ class QAOAKnapsack(ProblemRelatedFunctions):
 
     def __init__(self, problem_instance: KnapsackProblem, depth: int):
         self.problem_instance = problem_instance
+        print(self.problem_instance)
         self.depth = depth
         self.circuit = QuasiAdiabaticEvolution(self.problem_instance, self.depth)
         self.item_register_size = self.problem_instance.number_items
@@ -45,10 +46,10 @@ class QAOAKnapsack(ProblemRelatedFunctions):
 
 
 def main():
-    problem = exemplary_kp_instances["C"]
+    problem = exemplary_kp_instances["B"]
     #print(ProblemRelatedFunctions(problem).objective_function("10010000000"))
     start_time = time.time()
-    print("QAOA result = ", QAOAKnapsack(problem_instance = problem, depth = 1).execute_qaoa())
+    print(QAOAKnapsack(problem_instance = problem, depth = 1).execute_qaoa())
     print("Elapsed time = ", time.time() - start_time)
 
 
