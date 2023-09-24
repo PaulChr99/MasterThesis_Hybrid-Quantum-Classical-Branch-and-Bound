@@ -1,4 +1,7 @@
 from dataclasses import dataclass, fields
+import random
+import numpy as np
+from typing import List
 
 
 @dataclass
@@ -60,9 +63,49 @@ class KnapsackProblem:
         self.number_items = len(self.weights)
 
 
+
+
 exemplary_kp_instances = {
     "A": KnapsackProblem(profits = [1, 2], weights = [1, 1], capacity = 2),
     "B": KnapsackProblem(profits = [1, 4, 2], weights = [1, 3, 2], capacity = 3),
     "C": KnapsackProblem(profits = [3, 1, 2, 1], weights = [1, 1, 2, 2], capacity = 4),
     "D": KnapsackProblem(profits = [6, 5, 8, 9, 6, 7, 3], weights = [2, 3, 6, 7, 5, 9, 4], capacity = 9)
 }
+
+
+
+
+class GenerateKnapsackProblemInstances:
+
+    def generate_random_kp_instance_for_capacity_ratio(size: int, desired_capacity_ratio: float, maximum_value: int):
+        
+        def adjust_weights(weights: List[int], capacity: int):
+            for idx in range(len(weights)):
+                if weights[idx] > capacity:
+                    weights[idx] = random.randint(1, capacity)
+            missing_difference = int(1/desired_capacity_ratio * capacity) - sum(weights[:-1])
+            weights = [weight + int(np.ceil(missing_difference / size)) for weight in weights]
+            if len([weight for weight in weights if weight > capacity]) > 0:
+                weights = adjust_weights(weights, capacity)
+            return weights
+        
+        profits = [random.randint(1, maximum_value) for _ in range(size)]
+        weights = [random.randint(1, maximum_value) for _ in range(size)]
+        capacity = int(np.ceil(desired_capacity_ratio * sum(weights)))
+        weights = adjust_weights(weights, capacity)
+        
+        return KnapsackProblem(profits, weights, capacity)
+    
+
+
+
+def main():
+    generated_random_kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio(size = 15, desired_capacity_ratio = 0.25, maximum_value = 100)
+    print(generated_random_kp_instance)
+    print(generated_random_kp_instance.capacity / sum(generated_random_kp_instance.weights))
+
+
+if __name__ == "__main__":
+    main()
+        
+
