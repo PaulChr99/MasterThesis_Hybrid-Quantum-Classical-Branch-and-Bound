@@ -176,7 +176,6 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
             current_node = self.node_selection(stack) 
 
         optimal_solution, maximum_profit = incumbent, self.calculate_profit(incumbent)
-        print("weight of optimal solution = ", self.calculate_weight(optimal_solution))
         sorting_permutation = SortingProfitsAndWeights(self.profits, self.weights).sorting_permutation(self.problem_instance.profits, self.problem_instance.weights)
         optimal_solution_original_sorting = "".join([list(optimal_solution)[sorting_permutation.index(idx)] for idx in range(len(sorting_permutation))])
         result = {"optimal solution": optimal_solution_original_sorting, "maximum profit": maximum_profit, "number of explored nodes": counter, 

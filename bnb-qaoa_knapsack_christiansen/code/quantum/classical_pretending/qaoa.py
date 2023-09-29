@@ -4,7 +4,7 @@ sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\Maste
 
 import numpy as np
 from numpy.typing import NDArray
-from typing import List, Union
+from typing import List, Union, Dict
 import itertools
 import random
 import scipy.optimize as opt
@@ -15,40 +15,41 @@ from knapsack_problem import KnapsackProblem, GenerateKnapsackProblemInstances, 
 from classical_ingredients import SortingProfitsAndWeights, FeasibilityAndPruning, EvaluatingProfitsAndWeights
 
 
+
+class AuxiliaryFunctions:
+
+    def sort_kp_instance(kp_instance: KnapsackProblem):
+        sorting = SortingProfitsAndWeights(kp_instance.profits, kp_instance.weights).sorting_profits_weights()
+        return KnapsackProblem(
+            profits = sorting["profits"],
+            weights = sorting["weights"],
+            capacity = kp_instance.capacity
+        )
+
+
 class QTG:
 
     def __init__(self, kp_instance: KnapsackProblem):
-        self.kp_instance = KnapsackProblem(
-            profits = SortingProfitsAndWeights(kp_instance.profits, kp_instance.weights).sorting_profits_weights()["profits"],
-            weights = SortingProfitsAndWeights(kp_instance.profits, kp_instance.weights).sorting_profits_weights()["weights"],
-            capacity = kp_instance.capacity
-        )
+        self.kp_instance = AuxiliaryFunctions.sort_kp_instance(kp_instance)
         self.feasibility = FeasibilityAndPruning(kp_instance)
 
 
     def quantum_tree_generator(self):
 
         feasible_solutions = ["0" * self.kp_instance.number_items]
-        feasible_solutions_amplitudes = [1]
+        feasible_solutions_amplitudes: List[Union[float, int]] = [1]
         binary_values_of_feasible_solutions = [0]
 
         for item_idx in range(self.kp_instance.number_items):
-            #print("Item nr. ", item_idx)
             feasible_solutions_at_item_idx = []
             for bitstring in feasible_solutions:
-                #print("Bitstring = ", bitstring)
                 candidate = bitstring[:item_idx] + "1" + bitstring[(item_idx + 1):]
-                #print("Candidate = ", candidate)
-                #print("Weight of candidate = ", self.feasibility.calculate_weight(candidate))
-                #print("Profit of candidate = ", self.feasibility.calculate_profit(candidate))
                 if self.feasibility.is_feasible(candidate):
                     feasible_solutions_at_item_idx.append(candidate)
                     binary_values_of_feasible_solutions.append(int(candidate, 2))
                     feasible_solutions_amplitudes[feasible_solutions.index(bitstring)] *= 1/np.sqrt(2)
                     feasible_solutions_amplitudes.append(feasible_solutions_amplitudes[feasible_solutions.index(bitstring)])
             feasible_solutions += feasible_solutions_at_item_idx
-        #print("KP instance = ", self.kp_instance)
-        #print("Feasible solutions = ", feasible_solutions)
         print("QTG done")
         return {"binary values of feasible solutions": binary_values_of_feasible_solutions, "feasible solution amplitudes": feasible_solutions_amplitudes}
     
@@ -62,13 +63,10 @@ class QuasiAdiabaticEvolution(QTG):
         qtg_result = self.quantum_tree_generator()
         self.binary_values_of_feasible_solutions = qtg_result["binary values of feasible solutions"]
         self.feasible_solutions_amplitudes = np.array(qtg_result["feasible solution amplitudes"], dtype = "complex_")
-        #print("Sum of feasible solution amplitudes = ", sum([np.abs(amplitude)**2 for amplitude in self.feasible_solutions_amplitudes]))
         evaluation = EvaluatingProfitsAndWeights(self.kp_instance)
-        #print("Binary = ", self.binary_values_of_feasible_solutions)
-        #print("Translations = ", [bin(binary_value)[2:].zfill(self.kp_instance.number_items) for binary_value in self.binary_values_of_feasible_solutions])
         self.feasible_solutions_profits = [evaluation.calculate_profit(bin(binary_value)[2:].zfill(self.kp_instance.number_items)) for binary_value in self.binary_values_of_feasible_solutions]
-        #print("Profits of feasible solutions = ", self.feasible_solutions_profits)
     
+    # Make QTG result an input to the whole class, then it does not need to be re-computed in every iteration for simulation
 
     def apply_phase_separation_unitary(self, state: NDArray, gamma: Union[int, float]):
         for idx in range(len(state)):
@@ -92,12 +90,9 @@ class QuasiAdiabaticEvolution(QTG):
         beta_values = angles[1::2]
         
         state = deepcopy(self.feasible_solutions_amplitudes)
-        #print("Sum of initial state probabilities = ", sum([np.abs(amplitude)**2 for amplitude in state]))
         for j in range(self.depth):
             state = self.apply_phase_separation_unitary(state, gamma_values[j])
-            #print("State after phase separation = ", sum([np.abs(amplitude)**2 for amplitude in state]))
             state = self.apply_mixing_unitary(state, beta_values[j])
-            #print("State after mixing = ", sum([np.abs(amplitude)**2 for amplitude in state]))
 
         return state
     
@@ -105,15 +100,27 @@ class QuasiAdiabaticEvolution(QTG):
 
 class QAOA(QuasiAdiabaticEvolution):
 
+    def __init__(self, kp_instance: KnapsackProblem, depth: int):
+        self.unsorted_profits = kp_instance.profits
+        self.unsorted_weights = kp_instance.weights
+        QuasiAdiabaticEvolution.__init__(self, kp_instance, depth) 
+
+    def measure_state(self, state: NDArray):
+        probs_dict = {}
+        for idx in range(len(state)):
+            item_choice = bin(self.binary_values_of_feasible_solutions[idx])[2:].zfill(self.kp_instance.number_items)
+            probability = np.abs(state[idx])**2
+            probs_dict[f"{item_choice}"] = probability
+        if not np.isclose(sum(probs_dict.values()), 1, rtol = 1e-05):
+            raise ValueError("Even with tolerance all single probabilities don't sum to one.")
+        return probs_dict
+    
     def calculate_expectation_value(self, state: NDArray):
-        return sum([self.feasible_solutions_profits[idx] * np.abs(state[idx])**2 for idx in range(len(state))])
+        probs_dict = self.measure_state(state)
+        return sum([self.feasible_solutions_profits[idx] * list(probs_dict.values())[idx] for idx in range(len(probs_dict))])
     
     def angles_to_value(self, angles: List[Union[float, int]]):
-        #print("Initial feasible solution amplitudes = ", self.feasible_solutions_amplitudes)
         angle_state = self.apply_quasiadiabatic_evolution(angles)
-        #print("Sum of angle state probabilities = ", sum([np.abs(amplitude)**2 for amplitude in angle_state]))
-        #print("Expectation value = ", - self.calculate_expectation_value(angle_state))
-        #print("Circuit executed")
         return - self.calculate_expectation_value(angle_state)
     
     def optimize(self):
@@ -125,7 +132,13 @@ class QAOA(QuasiAdiabaticEvolution):
         optimization_result = opt.minimize(fun = self.angles_to_value, x0 = initial_guess, method = "Nelder-Mead", bounds = bounds_neldermead_format)
         optimal_angles = optimization_result.x
         optimal_value = - optimization_result.fun # Minus needed for optimization via Nelder-Mead minimum finding
-        return optimal_value
+        optimal_angle_state = self.apply_quasiadiabatic_evolution(optimal_angles)
+        probs_dict = self.measure_state(optimal_angle_state)
+        sorting_permutation = SortingProfitsAndWeights(self.kp_instance.profits, self.kp_instance.weights).sorting_permutation(self.unsorted_profits, self.unsorted_weights)
+        sorted_probs_dict = {
+            f"{''.join([list(bitstring)[sorting_permutation.index(idx)] for idx in range(len(sorting_permutation))])}": probs_dict[bitstring] for bitstring in list(probs_dict.keys())
+        }
+        return {"qaoa result": optimal_value, "solution probabilities": sorted_probs_dict}
 
 
 
@@ -134,7 +147,7 @@ class QAOA(QuasiAdiabaticEvolution):
 def main():
     kp_instance = exemplary_kp_instances["D"]
     random_kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio(
-        size = 30,
+        size = 40,
         desired_capacity_ratio = 0.05,
         maximum_value = 100
     )
@@ -150,7 +163,7 @@ def main():
     )
     #print(QTG(kp_instance).quantum_tree_generator())
     start_time = time.time()
-    print("QAOA result = ", QAOA(random_kp_instance, depth = 5).optimize())
+    print("QAOA result = ", QAOA(random_kp_instance, depth = 1).optimize()["qaoa result"])
     print("Elapsed time = ", time.time() - start_time)
 
 
