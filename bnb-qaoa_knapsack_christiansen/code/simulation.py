@@ -11,47 +11,6 @@ from typing import List, Dict, Union
 
 
 
-def simulate_approximation_ratio_vs_depth(qaoa_executions: int):
-
-    sample_depths = [1, 2, 3, 4]
-
-    markers = ["o", "x", "^", "P"]
-    if len(markers) < len(exemplary_kp_instances):
-        return ValueError("There need to be at least as many markers as different KP instances.")
-
-    sample_data = []
-    kp_instance: KnapsackProblem
-    for kp_instance in exemplary_kp_instances.values():
-        approximation_ratios_for_kp_instance = []
-        qubit_number = kp_instance.number_items + int(np.floor(np.log2(kp_instance.capacity)) + 1)
-        optimal_solution_value = BranchAndBound(kp_instance, simulation = True).branch_and_bound_algorithm()["maximum profit"]
-        for depth in sample_depths:
-            qaoa = QAOA(kp_instance, depth)
-            qaoa_results_for_depth = []
-            for _ in range(qaoa_executions):
-                qaoa_results_for_depth.append(qaoa.optimize()["qaoa result"])
-            average_qaoa_result = sum(qaoa_results_for_depth) / len(qaoa_results_for_depth)
-            approximation_ratios_for_kp_instance.append(average_qaoa_result / optimal_solution_value) 
-        sample_data.append({
-            "kp instance name": list(exemplary_kp_instances.keys())[list(exemplary_kp_instances.values()).index(kp_instance)],
-            "kp instance identifier": qubit_number,
-            "approximation ratios": approximation_ratios_for_kp_instance
-        })
-    print(sample_data)
-    for data_series in sample_data:
-        plt.scatter(
-            sample_depths, 
-            data_series["approximation ratios"], 
-            label = f"KP instance {data_series['kp instance name']} (#q = {data_series['kp instance identifier']})",
-            marker = markers[sample_data.index(data_series)]
-        )
-        plt.legend()
-        plt.xlabel("Depth")
-        plt.ylabel("Approximation ratio")
-        plt.title(f"Grover-mixer QAOA average approximation ratios for {qaoa_executions} executions")
-    plt.show()
-
-
 
 def simulate_lb_ratio_vs_residual_problem_size_and_depth(bnb_repitions: int):
     

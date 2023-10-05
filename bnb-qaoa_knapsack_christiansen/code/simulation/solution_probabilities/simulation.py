@@ -2,7 +2,7 @@ import sys
 sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\bnb-qaoa_knapsack_christiansen\\code")
 
 from knapsack_problem import KnapsackProblem, GenerateKnapsackProblemInstances, exemplary_kp_instances
-from quantum.classical_pretending.qaoa import QAOA
+from quantum.classical_pretending.qaoa import QAOA, QTG
 from branch_and_bound import BranchAndBound
 
 import numpy as np 
@@ -17,20 +17,20 @@ class AuxiliaryFunctions:
     
 
     def save_kp_instance_data_to_new_file(sample_kp_data: Dict[str, List[tuple]], generated_random_kp_instances: Dict[str, KnapsackProblem]):
-        for (qubit_number, kp_instance) in generated_random_kp_instances.items():
+        for ((size, qubit_number), kp_instance) in generated_random_kp_instances.items():
             save_kp_instance_data = open(
-                f"C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\bnb-qaoa_knapsack_christiansen\\code\\kp_instances_data\\uncorrelated\\{kp_instance.number_items}.txt", 
+                f"C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\bnb-qaoa_knapsack_christiansen\\code\\kp_instances_data\\simulation_data\\solution_probabilities\\{kp_instance.number_items}.txt", 
                 "a"
             )
-            kp_instances_for_number_of_items = {key: value for (key, value) in generated_random_kp_instances.items() if value.number_items == kp_instance.number_items}
-            index_in_kp_instances_of_same_item_number = list(kp_instances_for_number_of_items.keys()).index(qubit_number)
+            kp_instances_for_number_of_items = {key: value for (key, value) in generated_random_kp_instances.items() if value.number_items == size}
+            index_in_kp_instances_of_same_item_number = list(kp_instances_for_number_of_items.keys()).index((size, qubit_number))
             save_kp_instance_data.writelines([
                 f"Number of qubits: {qubit_number} \n",
                 f"Profits: {kp_instance.profits} \n",
                 f"Weights: {kp_instance.weights} \n",
                 f"Capacity: {kp_instance.capacity} \n",
-                f"Capacity ratio [capacity/sum(weights)]: {sample_kp_data[kp_instance.number_items][index_in_kp_instances_of_same_item_number][0]} \n",
-                f"Maximum value for profits & weights: {sample_kp_data[kp_instance.number_items][index_in_kp_instances_of_same_item_number][1]} \n"
+                f"Capacity ratio [capacity/sum(weights)]: {sample_kp_data[size][index_in_kp_instances_of_same_item_number][0]} \n",
+                f"Maximum value for profits & weights: {sample_kp_data[size][index_in_kp_instances_of_same_item_number][1]} \n"
             ])
             if index_in_kp_instances_of_same_item_number != len(kp_instances_for_number_of_items) - 1:
                 save_kp_instance_data.write("-" * (2 * kp_instance.number_items + 20) + "\n")
@@ -104,8 +104,8 @@ class SolutionProbabilitiesSimulation:
         self.sample_depths = sample_depths
         self.number_of_qaoa_executions = number_of_qaoa_executions
 
-    def compute_solution_probabilities_for_depth(self, kp_instance: KnapsackProblem, depth: int, relative_tolerance: float):
-        qaoa = QAOA(kp_instance, depth)
+    def compute_solution_probabilities_for_depth(self, kp_instance: KnapsackProblem, qtg_output: Dict[str, list], depth: int, relative_tolerance: float):
+        qaoa = QAOA(kp_instance, qtg_output, depth)
         cleaned_solution_probabilities_for_depth = {}
         for _ in range(self.number_of_qaoa_executions):
             solution_probabilities_for_depth: dict = qaoa.optimize()["solution probabilities"]
@@ -129,18 +129,17 @@ class SolutionProbabilitiesSimulation:
         sample_data = []
         for size in self.sample_kp_data.keys():
             for (capacity_ratio, maximum_value) in list(self.sample_kp_data[size]):
-                kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio(
-                    size, capacity_ratio, maximum_value
-                )
+                kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio(size, capacity_ratio, maximum_value)
                 #kp_instance = exemplary_kp_instances["C"]
                 qubit_number = AuxiliaryFunctions.calculate_number_of_qubits(kp_instance)
                 if (kp_instance.number_items, qubit_number) in list(generated_random_kp_instances.keys()):
-                    raise ValueError(f"Attention, by chance more than one KP instance identified via requiring {qubit_number} qubits has been generated.")
+                    raise ValueError(f"Attention, by chance more than one KP instance identified via requiring {qubit_number} qubits at {kp_instance.number_items} items has been generated.")
                 generated_random_kp_instances[(kp_instance.number_items, qubit_number)] = kp_instance
                 sample_data_for_kp_instance = []
+                qtg_output = QTG(kp_instance).quantum_tree_generator()
                 for depth in self.sample_depths:
                     print("New depth = ", depth)
-                    cleaned_solution_probabilities_for_depth = self.compute_solution_probabilities_for_depth(kp_instance, depth, relative_tolerance)
+                    cleaned_solution_probabilities_for_depth = self.compute_solution_probabilities_for_depth(kp_instance, qtg_output, depth, relative_tolerance)
                     sample_data_for_kp_instance.append({"depth": depth, "cleaned solution probabilities": cleaned_solution_probabilities_for_depth})
                 sample_data.append({
                     "kp instance size": kp_instance.number_items,
