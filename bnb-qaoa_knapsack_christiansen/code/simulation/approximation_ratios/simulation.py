@@ -39,9 +39,9 @@ class AuxiliaryFunctions:
         sample_capacity_ratios = set([data_series["kp instance capacity ratio"] for data_series in sample_data])
         if len(sample_sizes) > 1 or len(sample_capacity_ratios) > 1:
             raise ValueError("There should not be different problem sizes or capacity ratios appearing in the same sample_data object; please check!")
-        file_name = f"Approximation-Ratios_{list(sample_sizes)[0]}-Items_Capacity-Ratio-{list(sample_capacity_ratios)[0]}_{number_of_qaoa_executions}-QAOA-Executions"
-        plt.savefig(f"code/simulation/approximation_ratios/results/varying_max_value/{file_name}.png")
-        plt.savefig(f"C:/Users/d92474/Documents/Uni/Master Thesis/Simulations/Approximation Ratios/Varying maximum value/{file_name}.pdf")
+        base_file_name = f"{list(sample_sizes)[0]}-Items_Capacity-Ratio-{list(sample_capacity_ratios)[0]}_{number_of_qaoa_executions}-QAOA-Executions"
+        plt.savefig(f"code/simulation/approximation_ratios/results/varying_max_value/{base_file_name}.png")
+        plt.savefig(f"C:/Users/d92474/Documents/Uni/Master Thesis/Simulations/Approximation Ratios/Varying maximum value/{'Approximation-Ratios_' + base_file_name}.pdf")
     
 
     def create_file_for_kp_instance_data_varying_size(kp_instance: KnapsackProblem):
