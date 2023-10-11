@@ -27,8 +27,8 @@ class KnapsackProblem:
     number_items (int): the number of items
     """
 
-    profits: list
-    weights: list
+    profits: List[int]
+    weights: List[int]
     capacity: int
 
     def __post_init__(self):
@@ -41,11 +41,11 @@ class KnapsackProblem:
                 raise TypeError(f"The field '{f.name}' was assigned by '{actual_type}' instead of '{f.type}'.")
         """
 
-        if any([p for p in self.profits if not type(p) == int]):
+        """if any([p for p in self.profits if not type(p) == np.int64]):
             raise TypeError("Profits must be integer-valued.")
 
         if any([w for w in self.weights if not type(w) == int]):
-            raise TypeError("Weights must be integer-valued.")
+            raise TypeError("Weights must be integer-valued.")"""
         
         if len(self.profits) != len(self.weights):
             raise ValueError("Profits and weights have different length.")
@@ -59,6 +59,9 @@ class KnapsackProblem:
         if self.capacity < 0:
             raise ValueError("Capacity of knapsack must not be negative.")
         
+        self.profits = [np.int64(profit) for profit in self.profits]
+        self.weights = [np.int64(weight) for weight in self.weights]
+        self.capacity = np.int64(self.capacity)
         self.total_weight = sum(self.weights)
         self.number_items = len(self.weights)
 
@@ -77,7 +80,7 @@ exemplary_kp_instances = {
 
 class GenerateKnapsackProblemInstances:
 
-    def generate_random_kp_instance_for_capacity_ratio(size: int, desired_capacity_ratio: float, maximum_value: int):
+    def generate_random_kp_instance_for_capacity_ratio_and_maximum_value(size: int, desired_capacity_ratio: float, maximum_value: int):
         
         def adjust_weights(weights: List[int], capacity: int):
             for idx in range(len(weights)):

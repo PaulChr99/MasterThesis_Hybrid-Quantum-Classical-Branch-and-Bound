@@ -149,14 +149,13 @@ class QAOA(QuasiAdiabaticEvolution):
 
 def main():
     kp_instance = exemplary_kp_instances["D"]
-    random_kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio(
-        size = 60,
-        desired_capacity_ratio = 0.023,
-        maximum_value = 1e10
+    random_kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio_and_maximum_value(
+        size = 40,
+        desired_capacity_ratio = 0.034,
+        maximum_value = 1e14
     )
     print("Random KP instance = ", random_kp_instance)
     print("Qubits required = ", random_kp_instance.number_items + int(np.floor(np.log2(random_kp_instance.capacity)) + 1))
-    print("Optimal solution = ", BranchAndBound(kp_instance, simulation = True))
     large_kp_instance_data = open(
         "C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\bnb-qaoa_knapsack_christiansen\\code\\kp_instances_data\\uncorrelated\\100.txt", 
         "r"
@@ -166,10 +165,10 @@ def main():
         weights = [int(line.split()[1]) for line in large_kp_instance_data[1:-1]],
         capacity = int(large_kp_instance_data[0].split()[1])
     )
-    #qtg_output = QTG(random_kp_instance).quantum_tree_generator()
+    qtg_output = QTG(random_kp_instance).quantum_tree_generator()
     start_time = time.time()
-    #print("QAOA result = ", QAOA(random_kp_instance, qtg_output, depth = 1).optimize()["qaoa result"])
-    #print("Elapsed time = ", time.time() - start_time)
+    print("QAOA result = ", QAOA(random_kp_instance, qtg_output, depth = 1).optimize()["qaoa result"])
+    print("Elapsed time = ", time.time() - start_time)
 
 
 if __name__ == "__main__":

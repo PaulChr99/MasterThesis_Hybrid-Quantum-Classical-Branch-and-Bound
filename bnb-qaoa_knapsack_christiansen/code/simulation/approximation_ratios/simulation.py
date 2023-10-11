@@ -1,4 +1,3 @@
-from io import TextIOWrapper
 import sys
 sys.path.append("C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\bnb-qaoa_knapsack_christiansen\\code")
 
@@ -10,6 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from typing import List, Dict, Union
+from io import TextIOWrapper
 
 
 
@@ -85,7 +85,7 @@ class Visualization:
         self.save_figure = save_figure
         
 
-    def generate_scatter_plot(self, global_sample_data: List[List[dict]]):
+    def generate_plot(self, global_sample_data: List[List[dict]]):
         
         markers = ["o", "x", "^", "P", "d"]
         colors = ["peru", "teal", "darkorchid", "maroon", "cornflowerblue"]
@@ -151,7 +151,7 @@ class ApproximationRatios:
         for (capacity_ratio, maximum_value) in sample_kp_data.keys():
             generated_random_kp_instances_per_configuration_data = {}
             for size in sample_kp_data[(capacity_ratio, maximum_value)]:
-                kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio(size, capacity_ratio, maximum_value)
+                kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio_and_maximum_value(size, capacity_ratio, maximum_value)
                 #print("KP instance = ", kp_instance)
                 qubit_number = AuxiliaryFunctions().calculate_number_of_qubits(kp_instance)
                 generated_random_kp_instances_per_configuration_data[(kp_instance.number_items, capacity_ratio, maximum_value, qubit_number)] = kp_instance
@@ -183,7 +183,7 @@ class ApproximationRatios:
         for size in sample_kp_data.keys():
             generated_random_kp_instances_per_size = {}
             for (capacity_ratio, maximum_value) in sample_kp_data[size]:
-                kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio(size, capacity_ratio, maximum_value)
+                kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio_and_maximum_value(size, capacity_ratio, maximum_value)
                 #print("KP instance = ", kp_instance)
                 qubit_number = AuxiliaryFunctions().calculate_number_of_qubits(kp_instance)
                 generated_random_kp_instances_per_size[(size, capacity_ratio, maximum_value, qubit_number)] = kp_instance
@@ -207,7 +207,7 @@ class ApproximationRatios:
             self.number_of_qaoa_executions, 
             AuxiliaryFunctions.generate_data_series_label_for_varying_max_value, 
             AuxiliaryFunctions.save_figures_to_new_file_varying_max_value
-        ).generate_scatter_plot(global_sample_data)
+        ).generate_plot(global_sample_data)
 
 
 

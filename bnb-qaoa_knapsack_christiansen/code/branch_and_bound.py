@@ -3,9 +3,10 @@ import numpy as np
 import time
 from typing import Union, Dict
 
-from knapsack_problem import KnapsackProblem, exemplary_kp_instances
+from knapsack_problem import KnapsackProblem, GenerateKnapsackProblemInstances, exemplary_kp_instances
 from classical_ingredients import BranchingSearchingBacktracking, DynamicalSubproblems, SortingProfitsAndWeights, AuxiliaryFunctions, EvaluatingProfitsAndWeights, FeasibilityAndPruning
-from quantum.cpp_inspired.analysis import QAOAKnapsack as HardQAOA
+#from quantum.cpp_inspired.analysis import QAOAKnapsack as HardQAOA
+from quantum.classical_pretending.qaoa import QAOA as HardQAOA, QTG
 from quantum.qiskit.circuits import LinQAOACircuit
 from quantum.qiskit.linear_soft_constraint import LinearSoftConstraintQAOA
 
@@ -35,15 +36,24 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
         self.simulation = simulation
         self.quantum_soft, self.quantum_hard = quantum_soft, quantum_hard
         self.lb_simulation_raw_data = []
+        self.qaoa_counter = 0
     
     def greedy_vs_qaoa(self, partial_choice: str, hard_qaoa_depth: Union[int, None], soft_qaoa_depth: Union[int, None]):
         
-        greedy_lower_bound = self.greedy_lower_bound(partial_choice)
-        if not self.simulation: 
-            print("Greedy lower bound = ", greedy_lower_bound)
-        
         offset = self.calculate_profit(partial_choice)
         residual_subproblem = self.partial_choice_to_subproblem(partial_choice)
+        if len(residual_subproblem.profits) == 0 or len(residual_subproblem.weights) == 0:
+            if len(residual_subproblem.profits) == 0 == len(residual_subproblem.weights):
+                return offset
+            else:
+                raise ValueError("The subproblem generation is broken; none of the remaining items being affordable must be reflected both in profits and weights!")
+
+        greedy_lower_bound = self.greedy_lower_bound(residual_subproblem)
+        full_greedy_lower_bound = offset + greedy_lower_bound
+        if not self.simulation: 
+            print("Greedy lower bound = ", full_greedy_lower_bound)
+        
+                #print("Partial choice = ", partial_choice)
         #print("Residual subproblem = ", residual_subproblem)
         
         def soft_qaoa_lower_bound():
@@ -59,30 +69,33 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
             return offset + qaoa_result
         
         def hard_qaoa_lower_bound():
-            qaoa_result = HardQAOA(problem_instance = residual_subproblem, depth = hard_qaoa_depth).execute_qaoa()["qaoa result"]
+            qtg_output = QTG(residual_subproblem).quantum_tree_generator()
+            qaoa_result = HardQAOA(residual_subproblem, qtg_output, hard_qaoa_depth).optimize()["qaoa result"]
+            if self.simulation:
+                qubit_number_for_residual_subproblem = residual_subproblem.number_items + int(np.ceil(np.log2(residual_subproblem.capacity)) + 1)
+                self.lb_simulation_raw_data.append({"residual qubit size": qubit_number_for_residual_subproblem, "ratio": qaoa_result / greedy_lower_bound})
             return offset + qaoa_result
         
         if self.quantum_soft and not self.quantum_hard:
             qaoa_lb = soft_qaoa_lower_bound()
+            self.qaoa_counter += 1
             print("Soft QAOA lower bound = ", qaoa_lb)
-            return max(greedy_lower_bound, qaoa_lb)
+            return max(full_greedy_lower_bound, qaoa_lb)
         elif not self.quantum_soft and self.quantum_hard:
             qaoa_lb = hard_qaoa_lower_bound()
+            self.qaoa_counter += 1
             if not self.simulation: 
                 print("Hard QAOA lower bound = ", qaoa_lb)
-            if self.simulation:
-                qubit_number_for_residual_subproblem = residual_subproblem.number_items + int(np.ceil(np.log2(residual_subproblem.capacity)) + 1)
-                print("Residual subproblem qubit size = ", qubit_number_for_residual_subproblem)
-                self.lb_simulation_raw_data.append({"residual qubit size": qubit_number_for_residual_subproblem, "ratio": qaoa_lb / greedy_lower_bound})
-            return max(greedy_lower_bound, qaoa_lb)
+            return max(full_greedy_lower_bound, qaoa_lb)
         elif self.quantum_soft and self.quantum_hard:
             soft_qaoa_lb = soft_qaoa_lower_bound()
             print("Soft QAOA lower bound = ", soft_qaoa_lb)
             hard_qaoa_lb = hard_qaoa_lower_bound()
             print("Hard QAOA lower bound = ", hard_qaoa_lb)
-            return max(greedy_lower_bound, soft_qaoa_lb, hard_qaoa_lb)
+            self.qaoa_counter += 1
+            return max(full_greedy_lower_bound, soft_qaoa_lb, hard_qaoa_lb)
         else:
-            return greedy_lower_bound
+            return full_greedy_lower_bound
 
 
     def branch_and_bound_algorithm(self, hard_qaoa_depth: Union[int, None] = None, soft_qaoa_depth: Union[int, None] = None):
@@ -92,10 +105,10 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
         # Instantiate the algorithm
         stack = []
         incumbent = ""
-        best_lower_bound = self.greedy_lower_bound(incumbent)
+        best_lower_bound = self.greedy_lower_bound(self.partial_choice_to_subproblem(incumbent))
         stack = self.branching(stack)
         current_node = self.node_selection(stack)
-        counter, leaf_counter, qaoa_counter = 0, 0, 0
+        counter, leaf_counter = 0, 0
 
         # Iterate until the stack of unexplored nodes is empty
         while stack:
@@ -111,6 +124,8 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
                 if stack:
                     current_node = self.backtracking(stack)
                 continue
+
+            #print("Incumbent before = ", incumbent)
 
             """ It reduces computational effort when detecting a node for which the capacity
             is exactly and fully consumed, since the only valid solution is obtained by filling
@@ -156,18 +171,18 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
             
             # To avoid never arriving at any leaf, as long as no leaf has been found, nodes are only pruned
             # if current upper bound is really smaller (not \leq, see Latex) than best lower bound 
-            if self.can_be_pruned(current_node, best_lower_bound, is_first_solution = True):
+            if self.can_be_pruned(current_node, best_lower_bound, is_first_solution = True if len(incumbent) == 0 else False):
                 stack.remove(current_node)
                 # Can only backtrack to another node if stack is not empty after removing
                 if stack:
                     current_node = self.backtracking(stack)
                 continue
             
+            #print("Incumbent after = ", incumbent)
+
             # Nodes can be further processed properly if being feasible, not being a leaf and not being prunable
             # In this case: best lower bound potentially updated, child nodes generated via branching, and next node selected
             current_lower_bound = self.greedy_vs_qaoa(current_node, hard_qaoa_depth, soft_qaoa_depth)
-            if self.quantum_soft or self.quantum_hard:
-                qaoa_counter += 1
             if current_lower_bound > best_lower_bound:
                 best_lower_bound = current_lower_bound
             stack = self.branching(stack, current_node)
@@ -177,9 +192,13 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
 
         optimal_solution, maximum_profit = incumbent, self.calculate_profit(incumbent)
         sorting_permutation = SortingProfitsAndWeights(self.profits, self.weights).sorting_permutation(self.problem_instance.profits, self.problem_instance.weights)
+        #print("Length optimal solution == length sorting permutation ?: ", len(optimal_solution) == len(sorting_permutation))
+        #print("Optimal solution = ", optimal_solution)
+        #print("Incumbent profit = ", incumbent_profit)
+        #print("Sorting permutation = ", sorting_permutation)
         optimal_solution_original_sorting = "".join([list(optimal_solution)[sorting_permutation.index(idx)] for idx in range(len(sorting_permutation))])
         result = {"optimal solution": optimal_solution_original_sorting, "maximum profit": maximum_profit, "number of explored nodes": counter, 
-                    "number of leafs reached": leaf_counter, "number of qaoa executions": qaoa_counter} 
+                    "number of leafs reached": leaf_counter, "number of qaoa executions": self.qaoa_counter} 
         return result
 
 """
@@ -190,7 +209,7 @@ the performance (i.e. number of explored nodes and reached leafs) may vary from 
 
 
 def main():
-    problem_instance = exemplary_kp_instances["B"]
+    problem_instance = exemplary_kp_instances["D"]
     kp_instance_data = open(
         "C:\\Users\\d92474\\Documents\\Uni\\Master Thesis\\GitHub\\MasterThesis_Hybrid-Quantum-Classical-Branch-and-Bound\\bnb-qaoa_knapsack_christiansen\\code\\kp_instances_data\\uncorrelated\\10000.txt", 
         "r"
@@ -202,17 +221,19 @@ def main():
         weights, 
         capacity = int(kp_instance_data[0].split()[1]) #int(np.ceil(1/100 * sum(weights)))
     )
-    print("capacity ratio = ", kp_instance.capacity / sum(kp_instance.weights))
+    #print("capacity ratio = ", kp_instance.capacity / sum(kp_instance.weights))
     #print("capacity = ", int(np.ceil(kp_instance.capacity)))
-    bnb = BranchAndBound(kp_instance, simulation=True)
+    random_kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio_and_maximum_value(size = 20, desired_capacity_ratio = 0.1, maximum_value = 10**3)
+    #print("KP instance = ", random_kp_instance)
+    bnb = BranchAndBound(problem_instance, simulation = True, quantum_hard = True)
     start_time = time.time()
-    bnb_result = bnb.branch_and_bound_algorithm()
+    bnb_result = bnb.branch_and_bound_algorithm(hard_qaoa_depth = 3)
     print(bnb_result)
     #print("Selected items of bnb solution = ", AuxiliaryFunctions.find_selected_items(bnb_result["optimal solution"]))
-    optimal_solution = kp_instance_data[-1].replace(" ", "")
-    print("Selected items of bnb solution equal to optimal solution = ", AuxiliaryFunctions.find_selected_items(bnb_result["optimal solution"]) == AuxiliaryFunctions.find_selected_items(optimal_solution))
-    print("Optimal solution value = ", EvaluatingProfitsAndWeights(kp_instance).calculate_profit(optimal_solution))
-    print("Weight of optimal solution = ", EvaluatingProfitsAndWeights(kp_instance).calculate_weight(optimal_solution))
+    #optimal_solution = kp_instance_data[-1].replace(" ", "")
+    #print("Selected items of bnb solution equal to optimal solution = ", AuxiliaryFunctions.find_selected_items(bnb_result["optimal solution"]) == AuxiliaryFunctions.find_selected_items(optimal_solution))
+    #print("Optimal solution value = ", EvaluatingProfitsAndWeights(kp_instance).calculate_profit(optimal_solution))
+    #print("Weight of optimal solution = ", EvaluatingProfitsAndWeights(kp_instance).calculate_weight(optimal_solution))
     print("Elapsed time = ", time.time() - start_time)
 
 

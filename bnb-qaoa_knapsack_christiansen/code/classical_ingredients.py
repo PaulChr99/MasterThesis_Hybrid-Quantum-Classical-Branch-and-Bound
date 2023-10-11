@@ -29,6 +29,10 @@ class SortingProfitsAndWeights:
         self.weights = weights
 
     def sorting_profits_weights(self):
+        if len(self.profits) == 0 or len(self.weights) == 0:
+            if not len(self.profits) == 0 == len(self.weights):
+                raise ValueError("The generation of subproblems may be broken - both profits and weights should be empty in case of no remaining items being affordable!")
+            return {"profits": [], "weights": []}
         sorted_profits, sorted_weights = zip(*sorted(zip(self.profits, self.weights), reverse = True, key = lambda k: k[0]/k[1]))
         return {"profits": sorted_profits, "weights": sorted_weights}
     
@@ -65,8 +69,8 @@ class EvaluatingProfitsAndWeights:
     """
 
     def __init__(self, problem_instance: KnapsackProblem):
-        self.profits = problem_instance.profits
-        self.weights = problem_instance.weights
+        self.profits = SortingProfitsAndWeights(profits = problem_instance.profits, weights = problem_instance.weights).sorting_profits_weights()["profits"]
+        self.weights = SortingProfitsAndWeights(profits = problem_instance.profits, weights = problem_instance.weights).sorting_profits_weights()["weights"]
 
     def calculate_profit(self, bitstring: str):
         as_int_list = list(map(int, list(bitstring)))
@@ -108,14 +112,21 @@ class DynamicalSubproblems(EvaluatingProfitsAndWeights):
 
 class GreedyBounds(EvaluatingProfitsAndWeights):
     
-    def __init__(self, problem_instance: KnapsackProblem):
-        self.profits = SortingProfitsAndWeights(profits = problem_instance.profits, weights = problem_instance.weights).sorting_profits_weights()["profits"]
-        self.weights = SortingProfitsAndWeights(profits = problem_instance.profits, weights = problem_instance.weights).sorting_profits_weights()["weights"]
-        self.capacity = problem_instance.capacity
-        self.number_items = problem_instance.number_items
-        
-    def greedy_lower_bound(self, partial_solution: str):
-        current_weight = self.calculate_weight(partial_solution)
+    def greedy_lower_bound(self, problem_instance: KnapsackProblem):
+        sorted_problem_instance = KnapsackProblem(
+            profits = SortingProfitsAndWeights(problem_instance.profits, problem_instance.weights).sorting_profits_weights()["profits"],
+            weights = SortingProfitsAndWeights(problem_instance.profits, problem_instance.weights).sorting_profits_weights()["weights"],
+            capacity = problem_instance.capacity
+        )
+        current_weight, current_profit = 0, 0
+        for j in range(sorted_problem_instance.number_items):
+            if current_weight + sorted_problem_instance.weights[j] <= sorted_problem_instance.capacity:
+                current_weight += sorted_problem_instance.weights[j]
+                current_profit += sorted_problem_instance.profits[j]
+                if current_weight == sorted_problem_instance.capacity:
+                    break
+        return current_profit
+        """current_weight = self.calculate_weight(partial_solution)
         if current_weight > self.capacity:
             raise ValueError(f"The current partial solution {partial_solution} is not feasible, since its weight exceeds the capacity.")
         current_profit = self.calculate_profit(partial_solution)
@@ -127,10 +138,25 @@ class GreedyBounds(EvaluatingProfitsAndWeights):
             current_profit += self.profits[i]
             if current_weight == self.capacity:
                 break
-        return current_profit
+        return current_profit"""
 
-    def greedy_upper_bound(self, partial_solution: str):
-        current_weight = self.calculate_weight(partial_solution)
+    def greedy_upper_bound(self, problem_instance: KnapsackProblem):
+        sorted_problem_instance = KnapsackProblem(
+            profits = SortingProfitsAndWeights(problem_instance.profits, problem_instance.weights).sorting_profits_weights()["profits"],
+            weights = SortingProfitsAndWeights(problem_instance.profits, problem_instance.weights).sorting_profits_weights()["weights"],
+            capacity = problem_instance.capacity
+        )
+        current_weight, current_profit = 0, 0
+        for j in range(sorted_problem_instance.number_items):
+            if current_weight + sorted_problem_instance.weights[j] > sorted_problem_instance.capacity:
+                residual_capacity = sorted_problem_instance.capacity - current_weight
+                current_profit += sorted_problem_instance.profits[j] / sorted_problem_instance.weights[j] * residual_capacity
+                break
+            else:
+                current_weight += sorted_problem_instance.weights[j]
+                current_profit += sorted_problem_instance.profits[j]
+        return np.floor(current_profit)
+        """current_weight = self.calculate_weight(partial_solution)
         if current_weight > self.capacity:
             raise ValueError("The current partial solution is not feasible, since its weight exceeds the capacity.")
         current_profit = self.calculate_profit(partial_solution)
@@ -142,11 +168,15 @@ class GreedyBounds(EvaluatingProfitsAndWeights):
                 break
             current_weight += self.weights[i]
             current_profit += self.profits[i]
-        return current_profit
+        return current_profit"""
 
 
-class FeasibilityAndPruning(GreedyBounds):
+class FeasibilityAndPruning(GreedyBounds, DynamicalSubproblems):
 
+    def __init__(self, problem_instance: KnapsackProblem):
+        DynamicalSubproblems.__init__(self, problem_instance)
+        self.problem_instance = problem_instance
+    
     def is_feasible(self, current_node: str):
         weight = self.calculate_weight(current_node)
         return False if weight > self.capacity else True
@@ -154,7 +184,8 @@ class FeasibilityAndPruning(GreedyBounds):
     def can_be_pruned(self, partial_solution: str, best_lower_bound: int, is_first_solution: bool = False):
         if len(partial_solution) == 0:
             raise ValueError("There is no node to investigate.")
-        upper_bound = self.greedy_upper_bound(partial_solution)
+        offset = self.calculate_profit(partial_solution)
+        upper_bound = offset + self.greedy_upper_bound(self.partial_choice_to_subproblem(partial_solution))
         if is_first_solution:
             return True if (upper_bound < best_lower_bound) else False
         else:
@@ -185,9 +216,10 @@ class BranchingSearchingBacktracking(FeasibilityAndPruning):
         if len(solution_next_0) == len(solution_next_1) == self.number_items:
             return random.choice([solution_next_0, solution_next_1]) 
         if self.is_feasible(solution_next_0) and self.is_feasible(solution_next_1):
-            if self.greedy_lower_bound(solution_next_0) > self.greedy_lower_bound(solution_next_1):
+            greedy_lb_0, greedy_lb_1 = self.greedy_lower_bound(self.partial_choice_to_subproblem(solution_next_0)), self.greedy_lower_bound(self.partial_choice_to_subproblem(solution_next_1))
+            if greedy_lb_0 > greedy_lb_1:
                 return solution_next_0
-            elif self.greedy_lower_bound(solution_next_1) > self.greedy_lower_bound(solution_next_0):
+            elif greedy_lb_1 > greedy_lb_0:
                 return solution_next_1
         return random.choice([solution_next_0, solution_next_1])
 
