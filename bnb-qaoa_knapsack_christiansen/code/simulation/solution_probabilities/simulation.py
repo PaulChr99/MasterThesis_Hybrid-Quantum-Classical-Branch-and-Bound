@@ -129,7 +129,7 @@ class SolutionProbabilitiesSimulation:
         sample_data = []
         for size in self.sample_kp_data.keys():
             for (capacity_ratio, maximum_value) in list(self.sample_kp_data[size]):
-                kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio(size, capacity_ratio, maximum_value)
+                kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio_and_maximum_value(size, capacity_ratio, maximum_value)
                 #kp_instance = exemplary_kp_instances["C"]
                 qubit_number = AuxiliaryFunctions.calculate_number_of_qubits(kp_instance)
                 if (kp_instance.number_items, qubit_number) in list(generated_random_kp_instances.keys()):
@@ -155,11 +155,13 @@ class SolutionProbabilitiesSimulation:
 
 
 def main():
+    capacity_ratios = {3: 0.75, 5: 0.5, 7: 0.25}
+    sample_max_values = [1e4, 1e6, 1e10, 1e18]
     SolutionProbabilitiesSimulation(
         sample_kp_data = {
-            3: [(0.5, 10), (0.5, 100), (0.5, 1000), (0.5, 10000)],
-            5: [(0.5, 10), (0.5, 100), (0.5, 1000), (0.5, 10000)],
-            7: [(0.25, 10), (0.25, 100), (0.25, 1000), (0.25, 10000)]
+            3: [(capacity_ratios[3], max_value) for max_value in sample_max_values],
+            5: [(capacity_ratios[5], max_value) for max_value in sample_max_values],
+            7: [(capacity_ratios[7], max_value) for max_value in sample_max_values]
         },
         sample_depths = [1, 3, 5, 10],
         number_of_qaoa_executions = 10

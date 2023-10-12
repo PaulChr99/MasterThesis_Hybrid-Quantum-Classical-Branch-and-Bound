@@ -223,9 +223,12 @@ def main():
     )
     #print("capacity ratio = ", kp_instance.capacity / sum(kp_instance.weights))
     #print("capacity = ", int(np.ceil(kp_instance.capacity)))
-    random_kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio_and_maximum_value(size = 20, desired_capacity_ratio = 0.1, maximum_value = 10**3)
+    random_kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio_and_maximum_value(
+        size = 10, 
+        desired_capacity_ratio = 0.25,
+        maximum_value = 1e5)
     #print("KP instance = ", random_kp_instance)
-    bnb = BranchAndBound(problem_instance, simulation = True, quantum_hard = True)
+    bnb = BranchAndBound(random_kp_instance, simulation = True, quantum_hard = False)
     start_time = time.time()
     bnb_result = bnb.branch_and_bound_algorithm(hard_qaoa_depth = 3)
     print(bnb_result)
