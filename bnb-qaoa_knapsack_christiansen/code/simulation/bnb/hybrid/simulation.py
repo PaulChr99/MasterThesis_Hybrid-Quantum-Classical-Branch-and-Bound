@@ -163,7 +163,7 @@ class NumberOfExploredNodes:
 
 
 
-def main():
+def main(simulation_quantity: SimulationQuantity):
     sample_kp_data = {
         5: (0.25, 1e3), # Decrease of 0.05 in capacity ratio per size from here
         10: (0.19, 1e4),
@@ -178,9 +178,8 @@ def main():
         55: (0.02875, 1e16),
         60: (0.025, 1e18)
     }
-    #NumberOfExploredNodes(SimulationQuantity.number_of_explored_nodes, sample_kp_data, sample_depths = [1, 3, 5, 10], number_of_bnb_repitions = 4, number_of_equivalent_kp_instances = 10).simulate_and_visualize()
-    NumberOfExploredNodes(SimulationQuantity.number_of_leafs_reached, sample_kp_data, sample_depths = [1, 3, 5, 10], number_of_bnb_repitions = 4, number_of_equivalent_kp_instances = 10).simulate_and_visualize()
+    NumberOfExploredNodes(simulation_quantity, sample_kp_data, sample_depths = [1, 3, 5, 10], number_of_bnb_repitions = 4, number_of_equivalent_kp_instances = 10).simulate_and_visualize()
 
 
 if __name__ == "__main__":
-    main()
+    main(SimulationQuantity.number_of_leafs_reached) # Last run, pick other enum entry to simulate the number of explored nodes
