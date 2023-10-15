@@ -150,9 +150,9 @@ class QAOA(QuasiAdiabaticEvolution):
 def main():
     kp_instance = exemplary_kp_instances["D"]
     random_kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio_and_maximum_value(
-        size = 3,
-        desired_capacity_ratio = 0.75,
-        maximum_value = 1e18
+        size = 15,
+        desired_capacity_ratio = 0.135,
+        maximum_value = 1e4
     )
     print("Random KP instance = ", random_kp_instance)
     print("Qubits required = ", random_kp_instance.number_items + int(np.floor(np.log2(random_kp_instance.capacity)) + 1))

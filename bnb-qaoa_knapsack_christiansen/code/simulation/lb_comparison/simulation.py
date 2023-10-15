@@ -74,7 +74,6 @@ class Visualization:
 
     
     def generate_plot(self, sample_data: List[dict]):
-        colors = ["peru", "teal", "darkorchid", "maroon", "cornflowerblue"]
         for data_series in sample_data:
             for data_per_depth in data_series["data"]:
                 relative_residual_sizes_to_plot, lb_ratios_to_plot = map(list, zip(*sorted(zip(data_per_depth["relative residual sizes"], data_per_depth["lb ratios"]))))
@@ -83,7 +82,7 @@ class Visualization:
                     lb_ratios_to_plot, 
                     label = f"p = {data_per_depth['depth']}",
                     marker = self.markers[data_series["data"].index(data_per_depth)],
-                    color = colors[data_series["data"].index(data_per_depth)]
+                    color = self.colors[data_series["data"].index(data_per_depth)]
                 )
                 plt.legend()
                 plt.xlabel("Relative qubit size of subproblem")
@@ -99,7 +98,14 @@ class Visualization:
 
 class LowerBoundComparison:
 
-    def __init__(self, sample_kp_data: Dict[int, List[tuple]], desired_qubit_numbers: Dict[tuple, int], sample_depths: List[int], number_of_bnb_repitions: int, number_of_equivalent_random_kp_instances: int):
+    def __init__(
+            self, 
+            sample_kp_data: Dict[int, List[tuple]], 
+            desired_qubit_numbers: Dict[tuple, int], 
+            sample_depths: List[int], 
+            number_of_bnb_repitions: int, 
+            number_of_equivalent_random_kp_instances: int
+        ):
         self.sample_kp_data = sample_kp_data
         self.desired_qubit_numbers = desired_qubit_numbers
         self.sample_depths = sample_depths
