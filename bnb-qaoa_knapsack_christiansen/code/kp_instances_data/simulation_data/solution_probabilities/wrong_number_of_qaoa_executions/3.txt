@@ -1,0 +1,27 @@
+Number of qubits: 17 
+Profits: [1687, 9663, 6565] 
+Weights: [5397, 6778, 3186] 
+Capacity: 9728 
+Capacity ratio [capacity/sum(weights)]: 0.75 
+Maximum value for profits & weights: 10000.0 
+--------------------------
+Number of qubits: 22 
+Profits: [408168, 21837, 674741] 
+Weights: [192137, 444265, 63882] 
+Capacity: 489279 
+Capacity ratio [capacity/sum(weights)]: 0.75 
+Maximum value for profits & weights: 1000000.0 
+--------------------------
+Number of qubits: 38 
+Profits: [8030652118, 1793552079, 2382894948] 
+Weights: [11019914511, 11800879562, 12391770986] 
+Capacity: 19439052614 
+Capacity ratio [capacity/sum(weights)]: 0.75 
+Maximum value for profits & weights: 10000000000.0 
+--------------------------
+Number of qubits: 63 
+Profits: [439879374807900289, 383401964418164568, 783266714608944568] 
+Weights: [205566386527339911, 609040173310619324, 90972152626843418] 
+Capacity: 628012198496002560 
+Capacity ratio [capacity/sum(weights)]: 0.75 
+Maximum value for profits & weights: 1e+18 

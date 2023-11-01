@@ -40,8 +40,9 @@ class AuxiliaryFunctions:
 
 class Visualization:
 
-    def __init__(self, generated_random_kp_instances: List[KnapsackProblem], number_of_qaoa_executions: int, bar_width: float):
+    def __init__(self, generated_random_kp_instances: Dict[tuple, KnapsackProblem], optimal_solutions: Dict[tuple, int], number_of_qaoa_executions: int, bar_width: float):
         self.generated_random_kp_instances = generated_random_kp_instances
+        self.optimal_solutions = optimal_solutions
         self.number_of_qaoa_executions = number_of_qaoa_executions
         self.bar_width = bar_width
         
@@ -49,7 +50,9 @@ class Visualization:
     def configure_bar_plot_for_depth(self, item_choices_to_display: list, data_series: dict, data_per_depth: dict, color: str):
         solution_probabilities: dict = data_per_depth["cleaned solution probabilities"]
         horizontal_bar_positions = [item_choices_to_display.index(key) + data_series["data"].index(data_per_depth) * self.bar_width for key in list(solution_probabilities.keys())]
-        plt.bar(horizontal_bar_positions, solution_probabilities.values(), label=f"p = {data_per_depth['depth']}", width = self.bar_width, color = color)
+        probabilities = [value_dict["probability"] for value_dict in solution_probabilities.values()]
+        standard_deviations = [value_dict["standard deviation"] for value_dict in solution_probabilities.values()]
+        plt.bar(horizontal_bar_positions, probabilities, yerr = [np.minimum(standard_deviations, probabilities), standard_deviations], label=f"$p = {data_per_depth['depth']}$", width = self.bar_width, color = color, capsize = 2)
         plt.legend()
         plt.xlabel("Item choice")
         plt.ylabel("Probability")
@@ -78,9 +81,8 @@ class Visualization:
     def generate_bar_plots(self, sample_data: dict):
         colors = ["teal", "salmon", "lightblue", "purple"]
         for data_series in sample_data:
-            kp_instance: KnapsackProblem = self.generated_random_kp_instances[(data_series["kp instance size"], data_series["kp instance identifier"])]
-            #print("KP instance = ", kp_instance)
-            optimal_solution = BranchAndBound(kp_instance, simulation = True).branch_and_bound_algorithm()["optimal solution"]
+            kp_instance = self.generated_random_kp_instances[(data_series["kp instance size"], data_series["kp instance identifier"])]
+            optimal_solution = self.optimal_solutions[(data_series["kp instance size"], data_series["kp instance identifier"])]
             cleaned_item_choices_sets = [data_point["cleaned solution probabilities"].keys() for data_point in data_series["data"]]
             lenghts_of_item_choices_sets = [len(item_choice_set) for item_choice_set in cleaned_item_choices_sets]
             item_choices_to_display = list(cleaned_item_choices_sets[lenghts_of_item_choices_sets.index(max(lenghts_of_item_choices_sets))])
@@ -88,9 +90,9 @@ class Visualization:
                 self.configure_bar_plot_for_depth(item_choices_to_display, data_series, data_per_depth, colors[data_series["data"].index(data_per_depth)])
             self.style_bar_plot_for_kp_instance(item_choices_to_display, data_series, optimal_solution)
             qubit_number = AuxiliaryFunctions.calculate_number_of_qubits(kp_instance)
-            file_name = f"Solution-Probabilities_{kp_instance.number_items}-Items_{qubit_number}-Qubits_{self.number_of_qaoa_executions}-QAOA-Executions"
-            plt.savefig(f"code/simulation/solution_probabilities/results/{file_name}.png")
-            plt.savefig(f"C:/Users/d92474/Documents/Uni/Master Thesis/Simulations/Solution Probabilities/{file_name}.pdf")
+            base_file_name = f"{kp_instance.number_items}-Items_{qubit_number}-Qubits_{self.number_of_qaoa_executions}-QAOA-Executions"
+            plt.savefig(f"code/simulation/solution_probabilities/results/{base_file_name}.png")
+            plt.savefig(f"C:/Users/d92474/Documents/Uni/Master Thesis/Simulations/Solution Probabilities/Solution-Probabilities_{base_file_name}.pdf")
             if sample_data.index(data_series) != len(sample_data) - 1:
                 plt.figure()
         plt.show()
@@ -117,16 +119,17 @@ class SolutionProbabilitiesSimulation:
                     else:
                         cleaned_solution_probabilities_for_depth[item_choice_key] = [value]
         aggregated_solution_probabilities_for_depth = {
-            solution_key: sum(probabilities_list) / len(probabilities_list) for (solution_key, probabilities_list) in cleaned_solution_probabilities_for_depth.items()
+            solution_key: {"probability": np.mean(probabilities_list), "standard deviation": np.std(probabilities_list)} for (solution_key, probabilities_list) in cleaned_solution_probabilities_for_depth.items()
         }
+        max_occurring_probability = max([value_dict["probability"] for value_dict in aggregated_solution_probabilities_for_depth.values()])
         return {
-            solution_key: probability for (solution_key, probability) in aggregated_solution_probabilities_for_depth.items() if probability / max(list(aggregated_solution_probabilities_for_depth.values())) > 0.005
+            solution_key: value_dict for (solution_key, value_dict) in aggregated_solution_probabilities_for_depth.items() if value_dict["probability"] / max_occurring_probability > 0.005
         }
     
     
     def simulate_and_visualize(self, relative_tolerance: float, bar_width: float):
-        generated_random_kp_instances = {}
-        sample_data = []
+        generated_random_kp_instances: Dict[tuple, KnapsackProblem] = {}
+        optimal_solutions: Dict[tuple, int] = {}
         for size in self.sample_kp_data.keys():
             for (capacity_ratio, maximum_value) in list(self.sample_kp_data[size]):
                 kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio_and_maximum_value(size, capacity_ratio, maximum_value)
@@ -135,20 +138,24 @@ class SolutionProbabilitiesSimulation:
                 if (kp_instance.number_items, qubit_number) in list(generated_random_kp_instances.keys()):
                     raise ValueError(f"Attention, by chance more than one KP instance identified via requiring {qubit_number} qubits at {kp_instance.number_items} items has been generated.")
                 generated_random_kp_instances[(kp_instance.number_items, qubit_number)] = kp_instance
-                sample_data_for_kp_instance = []
-                qtg_output = QTG(kp_instance).quantum_tree_generator()
-                for depth in self.sample_depths:
-                    print("New depth = ", depth)
-                    cleaned_solution_probabilities_for_depth = self.compute_solution_probabilities_for_depth(kp_instance, qtg_output, depth, relative_tolerance)
-                    sample_data_for_kp_instance.append({"depth": depth, "cleaned solution probabilities": cleaned_solution_probabilities_for_depth})
-                sample_data.append({
-                    "kp instance size": kp_instance.number_items,
-                    "kp instance identifier": qubit_number,
-                    "data": sample_data_for_kp_instance
-                })
-        #print(sample_data)
+                print("KP instance = ", kp_instance)
+                optimal_solutions[(kp_instance.number_items, qubit_number)] = BranchAndBound(kp_instance, simulation = True).branch_and_bound_algorithm()["optimal solution"]
         AuxiliaryFunctions.save_kp_instance_data_to_new_file(self.sample_kp_data, generated_random_kp_instances)
-        Visualization(generated_random_kp_instances, self.number_of_qaoa_executions, bar_width).generate_bar_plots(sample_data)
+        sample_data = []
+        for ((size, qubit_number), kp_instance) in generated_random_kp_instances.items():
+            sample_data_for_kp_instance = []
+            qtg_output = QTG(kp_instance).quantum_tree_generator()
+            for depth in self.sample_depths:
+                print("New depth = ", depth)
+                cleaned_solution_probabilities_for_depth = self.compute_solution_probabilities_for_depth(kp_instance, qtg_output, depth, relative_tolerance)
+                sample_data_for_kp_instance.append({"depth": depth, "cleaned solution probabilities": cleaned_solution_probabilities_for_depth})
+            sample_data.append({
+                "kp instance size": kp_instance.number_items,
+                "kp instance identifier": qubit_number,
+                "data": sample_data_for_kp_instance
+            })
+        print(sample_data)
+        Visualization(generated_random_kp_instances, optimal_solutions, self.number_of_qaoa_executions, bar_width).generate_bar_plots(sample_data)
 
         # Try whether this works for cases in which the data sets for different depths do not share the same keys
 

@@ -13,7 +13,7 @@ from enum import Enum
 
 class SimulationQuantity(Enum):
     number_of_explored_nodes = "number of explored nodes"
-    number_of_leafs_reached = "number of leafs reached"
+    number_of_leaves_reached = "number of leaves reached"
 
 
 
@@ -57,8 +57,9 @@ class Visualization:
         self.number_of_equivalent_random_kp_instances = number_of_equivalent_random_kp_instances
 
     
-    def configure_plot(self, number_of_explored_nodes: List[int], label: str, marker: str, color: str):
+    def configure_plot(self, number_of_explored_nodes: List[Union[int, float]], standard_deviations: List[float], label: str, marker: str, color: str):
         plt.plot(self.sample_data.keys(), number_of_explored_nodes, label = label, marker = marker, color = color)
+        plt.errorbar(self.sample_data.keys(), number_of_explored_nodes, yerr = standard_deviations, fmt = marker, color = color, ecolor = color, capsize = 2)
         plt.legend()
         plt.xlabel("Number of items")
         plt.ylabel(self.simulation_quantity.value.capitalize())
@@ -67,17 +68,19 @@ class Visualization:
 
     def generate_plot(self):
         self.configure_plot(
-            number_of_explored_nodes = [averaged_sample_data_for_size["classical"] for averaged_sample_data_for_size in self.sample_data.values()],
+            number_of_explored_nodes = [averaged_sample_data_for_size["classical"]["number of explored nodes"] for averaged_sample_data_for_size in self.sample_data.values()],
+            standard_deviations = [averaged_sample_data_for_size["classical"]["standard deviation"] for averaged_sample_data_for_size in self.sample_data.values()],
             label = "Classical B&B",
             marker = self.markers[0],
             color = self.colors[0]
         )
-        hybrid_average_numbers_of_explored_nodes = [averaged_sample_data_for_size["hybrid"] for averaged_sample_data_for_size in self.sample_data.values()]
+        hybrid_average_data = [averaged_sample_data_for_size["hybrid"] for averaged_sample_data_for_size in self.sample_data.values()]
         for depth in self.sample_depths:
-            hybrid_average_number_of_explored_nodes_with_same_depth = [hybrid_sample_data_for_size[depth] for hybrid_sample_data_for_size in hybrid_average_numbers_of_explored_nodes]
+            hybrid_average_data_with_same_depth = [hybrid_sample_data_for_size[depth] for hybrid_sample_data_for_size in hybrid_average_data]
             self.configure_plot(
-                number_of_explored_nodes = hybrid_average_number_of_explored_nodes_with_same_depth,
-                label = f"Hybrid B&B with p = {depth}",
+                number_of_explored_nodes = [data_point["number of explored nodes"] for data_point in hybrid_average_data_with_same_depth],
+                standard_deviations = [data_point["standard deviation"] for data_point in hybrid_average_data_with_same_depth],
+                label = f"Hybrid B&B with $p = {depth}$",
                 marker = self.markers[self.sample_depths.index(depth) + 1],
                 color = self.colors[self.sample_depths.index(depth) + 1]
             )
@@ -112,21 +115,26 @@ class NumberOfExploredNodes:
                 else:
                     hybrid_bnb_numbers_of_explored_nodes[depth] = [hybrid_bnb.branch_and_bound_algorithm(hard_qaoa_depth = depth)[self.simulation_quantity.value]]
         return {
-            "classical": sum(classical_bnb_numbers_of_explored_nodes) / len(classical_bnb_numbers_of_explored_nodes),
-            "hybrid": {depth: sum(numbers_of_explored_nodes) / len(numbers_of_explored_nodes) for (depth, numbers_of_explored_nodes) in hybrid_bnb_numbers_of_explored_nodes.items()}
+            "classical": {"number of explored nodes": np.mean(classical_bnb_numbers_of_explored_nodes), "standard deviation": np.std(classical_bnb_numbers_of_explored_nodes)},
+            "hybrid": {depth: {"number of explored nodes": np.mean(numbers_of_explored_nodes), "standard deviation": np.std(numbers_of_explored_nodes)} for (depth, numbers_of_explored_nodes) in hybrid_bnb_numbers_of_explored_nodes.items()}
         }
     
 
     def compute_average_data_for_equivalent_kp_instances(self, sample_data_for_configuration_data: List[dict]):
-        classical_bnb_averaged_numbers_of_explored_nodes = [sample_data_for_kp_instance["classical"] for sample_data_for_kp_instance in sample_data_for_configuration_data]
-        classical_average = sum(classical_bnb_averaged_numbers_of_explored_nodes) / len(classical_bnb_averaged_numbers_of_explored_nodes)
-        hybrid_bnb_averaged_numbers_of_explored_nodes = [sample_data_for_kp_instance["hybrid"] for sample_data_for_kp_instance in sample_data_for_configuration_data]
+        classical_bnb_data = [sample_data_for_kp_instance["classical"] for sample_data_for_kp_instance in sample_data_for_configuration_data]
+        hybrid_bnb_data = [sample_data_for_kp_instance["hybrid"] for sample_data_for_kp_instance in sample_data_for_configuration_data]
         hybrid_averages = {}
         for depth in self.sample_depths:
-            hybrid_bnb_averaged_numbers_of_explored_nodes_for_same_depth = [hybrid_sample_data_for_kp_instance[depth] for hybrid_sample_data_for_kp_instance in hybrid_bnb_averaged_numbers_of_explored_nodes]
-            hybrid_averages[depth] = sum(hybrid_bnb_averaged_numbers_of_explored_nodes_for_same_depth) / len(hybrid_bnb_averaged_numbers_of_explored_nodes_for_same_depth)
+            hybrid_bnb_data_for_same_depth = [hybrid_sample_data_for_kp_instance[depth] for hybrid_sample_data_for_kp_instance in hybrid_bnb_data]
+            hybrid_averages[depth] = {
+                "number of explored nodes": np.mean([data_point["number of explored nodes"] for data_point in hybrid_bnb_data_for_same_depth]),
+                "standard deviation": np.mean([data_point["standard deviation"] for data_point in hybrid_bnb_data_for_same_depth])
+            }
         return {
-            "classical": classical_average,
+            "classical": {
+                "number of explored nodes": np.mean([data_point["number of explored nodes"] for data_point in classical_bnb_data]), 
+                "standard deviation": np.mean([data_point["standard deviation"] for data_point in classical_bnb_data])
+            },
             "hybrid": hybrid_averages
         }
 
@@ -182,4 +190,4 @@ def main(simulation_quantity: SimulationQuantity):
 
 
 if __name__ == "__main__":
-    main(SimulationQuantity.number_of_leafs_reached) # Last run, pick other enum entry to simulate the number of explored nodes
+    main(SimulationQuantity.number_of_explored_nodes) # Last run, pick other enum entry to simulate the number of leaves reached

@@ -103,7 +103,7 @@ class GenerateKnapsackProblemInstances:
 
 
 def main():
-    generated_random_kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio(size = 15, desired_capacity_ratio = 0.25, maximum_value = 100)
+    generated_random_kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio_and_maximum_value(size = 1000, desired_capacity_ratio = 0.01, maximum_value = 1000)
     print(generated_random_kp_instance)
     print(generated_random_kp_instance.capacity / sum(generated_random_kp_instance.weights))
 

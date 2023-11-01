@@ -1,0 +1,69 @@
+Number of qubits: 15 
+Profits: [607, 744, 720, 797, 707] 
+Weights: [728, 715, 666, 556, 598] 
+Capacity: 761 
+Capacity ratio [capacity/sum(weights)]: 0.25 
+Maximum value for profits & weights: 1000.0 
+------------------------------
+Number of qubits: 15 
+Profits: [601, 60, 389, 863, 156] 
+Weights: [591, 602, 642, 654, 593] 
+Capacity: 656 
+Capacity ratio [capacity/sum(weights)]: 0.25 
+Maximum value for profits & weights: 1000.0 
+------------------------------
+Number of qubits: 14 
+Profits: [951, 474, 178, 694, 125] 
+Weights: [389, 404, 462, 467, 259] 
+Capacity: 475 
+Capacity ratio [capacity/sum(weights)]: 0.25 
+Maximum value for profits & weights: 1000.0 
+------------------------------
+Number of qubits: 15 
+Profits: [908, 867, 63, 144, 678] 
+Weights: [604, 678, 665, 678, 544] 
+Capacity: 690 
+Capacity ratio [capacity/sum(weights)]: 0.25 
+Maximum value for profits & weights: 1000.0 
+------------------------------
+Number of qubits: 15 
+Profits: [630, 40, 224, 68, 166] 
+Weights: [495, 513, 463, 467, 138] 
+Capacity: 517 
+Capacity ratio [capacity/sum(weights)]: 0.25 
+Maximum value for profits & weights: 1000.0 
+------------------------------
+Number of qubits: 15 
+Profits: [84, 777, 157, 835, 755] 
+Weights: [897, 858, 650, 899, 599] 
+Capacity: 906 
+Capacity ratio [capacity/sum(weights)]: 0.25 
+Maximum value for profits & weights: 1000.0 
+------------------------------
+Number of qubits: 14 
+Profits: [797, 384, 315, 140, 563] 
+Weights: [446, 459, 408, 430, 446] 
+Capacity: 473 
+Capacity ratio [capacity/sum(weights)]: 0.25 
+Maximum value for profits & weights: 1000.0 
+------------------------------
+Number of qubits: 15 
+Profits: [432, 737, 608, 575, 45] 
+Weights: [530, 546, 454, 531, 308] 
+Capacity: 556 
+Capacity ratio [capacity/sum(weights)]: 0.25 
+Maximum value for profits & weights: 1000.0 
+------------------------------
+Number of qubits: 15 
+Profits: [258, 849, 89, 379, 598] 
+Weights: [612, 663, 641, 689, 543] 
+Capacity: 706 
+Capacity ratio [capacity/sum(weights)]: 0.25 
+Maximum value for profits & weights: 1000.0 
+------------------------------
+Number of qubits: 14 
+Profits: [636, 437, 532, 864, 796] 
+Weights: [385, 340, 364, 388, 181] 
+Capacity: 391 
+Capacity ratio [capacity/sum(weights)]: 0.25 
+Maximum value for profits & weights: 1000.0 

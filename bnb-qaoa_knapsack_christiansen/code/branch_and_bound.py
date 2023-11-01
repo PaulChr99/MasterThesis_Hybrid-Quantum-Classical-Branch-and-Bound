@@ -149,7 +149,7 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
                     current_node = self.backtracking(stack)
                 continue 
             
-            # Computing bounds for (feasible) leafs is useless effort, so they are directly evaluated
+            # Computing bounds for (feasible) leaves is useless effort, so they are directly evaluated
             if len(current_node) == self.number_items:
                 leaf_counter += 1
                 #print("leaf = ", AuxiliaryFunctions.find_selected_items(current_node))
@@ -198,12 +198,12 @@ class BranchAndBound(BranchingSearchingBacktracking, DynamicalSubproblems):
         #print("Sorting permutation = ", sorting_permutation)
         optimal_solution_original_sorting = "".join([list(optimal_solution)[sorting_permutation.index(idx)] for idx in range(len(sorting_permutation))])
         result = {"optimal solution": optimal_solution_original_sorting, "maximum profit": maximum_profit, "number of explored nodes": counter, 
-                    "number of leafs reached": leaf_counter, "number of qaoa executions": self.qaoa_counter} 
+                    "number of leaves reached": leaf_counter, "number of qaoa executions": self.qaoa_counter} 
         return result
 
 """
 Now everything seems to work properly. However, due to choosing the next node randomly (e.g. when not both of the candidates are feasible)
-the performance (i.e. number of explored nodes and reached leafs) may vary from one execution to another.
+the performance (i.e. number of explored nodes and reached leaves) may vary from one execution to another.
 """
 
 
@@ -224,13 +224,18 @@ def main():
     #print("capacity ratio = ", kp_instance.capacity / sum(kp_instance.weights))
     #print("capacity = ", int(np.ceil(kp_instance.capacity)))
     random_kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio_and_maximum_value(
-        size = 10, 
-        desired_capacity_ratio = 0.25,
-        maximum_value = 1e5)
+        size = 3, 
+        desired_capacity_ratio = 0.75,
+        maximum_value = 1e18)
+    check_kp_instance = KnapsackProblem(
+        profits = [1184, 111, 4967, 1544, 1100],
+        weights = [10885, 10950, 2267, 3385, 7808],
+        capacity = 14393
+    )
     #print("KP instance = ", random_kp_instance)
-    bnb = BranchAndBound(random_kp_instance, simulation = True, quantum_hard = False)
+    bnb = BranchAndBound(check_kp_instance, simulation = False)
     start_time = time.time()
-    bnb_result = bnb.branch_and_bound_algorithm(hard_qaoa_depth = 3)
+    bnb_result = bnb.branch_and_bound_algorithm()
     print(bnb_result)
     #print("Selected items of bnb solution = ", AuxiliaryFunctions.find_selected_items(bnb_result["optimal solution"]))
     #optimal_solution = kp_instance_data[-1].replace(" ", "")

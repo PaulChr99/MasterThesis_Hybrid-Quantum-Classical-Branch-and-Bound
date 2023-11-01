@@ -76,13 +76,22 @@ class Visualization:
     def generate_plot(self, sample_data: List[dict]):
         for data_series in sample_data:
             for data_per_depth in data_series["data"]:
-                relative_residual_sizes_to_plot, lb_ratios_to_plot = map(list, zip(*sorted(zip(data_per_depth["relative residual sizes"], data_per_depth["lb ratios"]))))
+                relative_residual_sizes_to_plot, lb_ratios_to_plot, standard_deviations_to_plot = map(list, zip(*sorted(zip(data_per_depth["relative residual sizes"], data_per_depth["lb ratios"], data_per_depth["standard deviations"]))))
                 plt.plot(
                     relative_residual_sizes_to_plot, 
                     lb_ratios_to_plot, 
-                    label = f"p = {data_per_depth['depth']}",
+                    label = f"$p = {data_per_depth['depth']}$",
                     marker = self.markers[data_series["data"].index(data_per_depth)],
                     color = self.colors[data_series["data"].index(data_per_depth)]
+                )
+                plt.errorbar(
+                    relative_residual_sizes_to_plot,
+                    lb_ratios_to_plot,
+                    yerr = standard_deviations_to_plot,
+                    fmt = self.markers[data_series["data"].index(data_per_depth)],
+                    color = self.colors[data_series["data"].index(data_per_depth)],
+                    ecolor = self.colors[data_series["data"].index(data_per_depth)],
+                    capsize = 2
                 )
                 plt.legend()
                 plt.xlabel("Relative qubit size of subproblem")
@@ -119,8 +128,7 @@ class LowerBoundComparison:
             residual_qubit_size = raw_data_point["residual qubit size"]
             if residual_qubit_size not in [data_point["residual qubit size"] for data_point in functional_raw_data]:
                 ratios_for_same_size = [data_point["ratio"] for data_point in raw_data if data_point["residual qubit size"] == residual_qubit_size]
-                average_ratio = sum(ratios_for_same_size) / len(ratios_for_same_size)
-                functional_raw_data.append({"residual qubit size": residual_qubit_size, "ratio": average_ratio})
+                functional_raw_data.append({"residual qubit size": residual_qubit_size, "ratio": np.mean(ratios_for_same_size), "standard deviation": np.std(ratios_for_same_size)})
         return functional_raw_data
     
 
@@ -141,7 +149,8 @@ class LowerBoundComparison:
             relative_residual_sizes = list(set(relative_residual_sizes + relative_residual_sizes_for_depth))
             lb_ratios = [data_point["ratio"] for data_point in functional_raw_data]
             #print(f"lb ratios for depth {depth} = ", lb_ratios)
-            sample_data_for_kp_instance.append({"depth": depth, "relative residual sizes": relative_residual_sizes_for_depth, "lb ratios": lb_ratios})
+            standard_deviations = [data_point["standard deviation"] for data_point in functional_raw_data]
+            sample_data_for_kp_instance.append({"depth": depth, "relative residual sizes": relative_residual_sizes_for_depth, "lb ratios": lb_ratios, "standard deviations": standard_deviations})
         return sample_data_for_kp_instance
     
 
@@ -153,25 +162,31 @@ class LowerBoundComparison:
                 raise ValueError("Check averaging function as sample data dict objects in sample_data_with_sample_depths are supposed to have the same depth, but don't!")
             aggregated_data_per_depth = {}
             for sample_data_for_depth in sample_data_with_same_depths:
-                dict_rel_res_size_to_lb_ratio = {rel_res_size: lb_ratio for (rel_res_size, lb_ratio) in zip(sample_data_for_depth["relative residual sizes"], sample_data_for_depth["lb ratios"])}
+                dict_rel_res_size_to_lb_ratio = {
+                    rel_res_size: {"lb ratio": lb_ratio, "standard deviation": standard_deviation} 
+                    for (rel_res_size, lb_ratio, standard_deviation) in zip(sample_data_for_depth["relative residual sizes"], sample_data_for_depth["lb ratios"], sample_data_for_depth["standard deviations"])
+                }
                 for rel_res_size in dict_rel_res_size_to_lb_ratio.keys():
                     if rel_res_size in aggregated_data_per_depth.keys():
                         aggregated_data_per_depth[rel_res_size] += [dict_rel_res_size_to_lb_ratio[rel_res_size]]
                     else:
                         aggregated_data_per_depth[rel_res_size] = [dict_rel_res_size_to_lb_ratio[rel_res_size]]    
             #print("Aggregated data per depth = ", aggregated_data_per_depth)
-            average_data_per_depth = {key: sum(value)/len(value) for (key, value) in aggregated_data_per_depth.items()}
+            average_data_per_depth = {
+                key: {"lb ratio": np.mean([ratio_std_dict["lb ratio"] for ratio_std_dict in value]), "standard deviation": np.mean([ratio_std_dict["standard deviation"] for ratio_std_dict in value])} 
+                for (key, value) in aggregated_data_per_depth.items()}
             #print("Average data per depth = ", average_data_per_depth)
             averaged_data.append({
                 "depth": sample_data_for_depth["depth"],
                 "relative residual sizes": average_data_per_depth.keys(),
-                "lb ratios": average_data_per_depth.values()
+                "lb ratios": [value["lb ratio"] for value in average_data_per_depth.values()] ,
+                "standard deviations": [value["standard deviation"] for value in average_data_per_depth.values()]
             })
         #print("Averaged data = ", averaged_data)
         return averaged_data
     
 
-    def simulate_and_visualize(self):
+    def generate_and_save_kp_instances(self,):
         generated_random_kp_instances: Dict[tuple, KnapsackProblem] = {}
         for size in self.sample_kp_data.keys():
             for (capacity_ratio, maximum_value) in self.sample_kp_data[size]:
@@ -182,10 +197,17 @@ class LowerBoundComparison:
                 qubit_number = self.desired_qubit_numbers[(size, maximum_value)]
                 generated_random_kp_instances[(size, capacity_ratio, maximum_value, qubit_number)] = generated_random_kp_instances_per_configuration_data
         AuxiliaryFunctions.save_kp_instances_to_new_files(generated_random_kp_instances)
+        return generated_random_kp_instances
+    
+
+    def simulate_and_visualize(self):
+        generated_random_kp_instances = self.generate_and_save_kp_instances()
         sample_data = []
         for ((size, capacity_ratio, maximum_value, qubit_number), equivalent_kp_instances) in generated_random_kp_instances.items():
+            print("New (size, capacity ratio, maximum value, qubit number) = ", (size, capacity_ratio, maximum_value, qubit_number))
             sample_data_per_configuration_data = []
             for kp_instance in equivalent_kp_instances:
+                print("Next equivalent KP instance")
                 sample_data_per_configuration_data.append(self.generate_data_for_kp_instance(kp_instance))
             #print("Sample data per configuration data = ", sample_data_per_configuration_data)
             averaged_sample_data = self.compute_average_data_for_kp_instance_configuration_data(sample_data_per_configuration_data)
