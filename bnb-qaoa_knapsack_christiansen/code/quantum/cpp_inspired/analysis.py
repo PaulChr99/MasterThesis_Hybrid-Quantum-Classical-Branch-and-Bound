@@ -40,13 +40,13 @@ class QAOAKnapsack(ProblemRelatedFunctions):
         self.qaoa = QAOA(ProblemType.maximization, self.objective_function, self.circuit.apply_quasiadiabatic_evolution, depth, self.item_register_size, self.capacity_register_size)
 
     def execute_qaoa(self):
-        return self.qaoa.execute_qaoa()
+        return self.qaoa.execute_qaoa()["qaoa result"]
 
 
 
 
 def main():
-    problem = exemplary_kp_instances["B"]
+    problem = exemplary_kp_instances["D"]
     #print(ProblemRelatedFunctions(problem).objective_function("10010000000"))
     start_time = time.time()
     print(QAOAKnapsack(problem_instance = problem, depth = 1).execute_qaoa())

@@ -1,4 +1,7 @@
 from dataclasses import dataclass, fields
+import random
+import numpy as np
+from typing import List
 
 
 @dataclass
@@ -24,8 +27,8 @@ class KnapsackProblem:
     number_items (int): the number of items
     """
 
-    profits: list
-    weights: list
+    profits: List[int]
+    weights: List[int]
     capacity: int
 
     def __post_init__(self):
@@ -38,11 +41,11 @@ class KnapsackProblem:
                 raise TypeError(f"The field '{f.name}' was assigned by '{actual_type}' instead of '{f.type}'.")
         """
 
-        if any([p for p in self.profits if not type(p) == int]):
+        """if any([p for p in self.profits if not type(p) == np.int64]):
             raise TypeError("Profits must be integer-valued.")
 
         if any([w for w in self.weights if not type(w) == int]):
-            raise TypeError("Weights must be integer-valued.")
+            raise TypeError("Weights must be integer-valued.")"""
         
         if len(self.profits) != len(self.weights):
             raise ValueError("Profits and weights have different length.")
@@ -56,8 +59,13 @@ class KnapsackProblem:
         if self.capacity < 0:
             raise ValueError("Capacity of knapsack must not be negative.")
         
+        self.profits = [np.int64(profit) for profit in self.profits]
+        self.weights = [np.int64(weight) for weight in self.weights]
+        self.capacity = np.int64(self.capacity)
         self.total_weight = sum(self.weights)
         self.number_items = len(self.weights)
+
+
 
 
 exemplary_kp_instances = {
@@ -66,3 +74,41 @@ exemplary_kp_instances = {
     "C": KnapsackProblem(profits = [3, 1, 2, 1], weights = [1, 1, 2, 2], capacity = 4),
     "D": KnapsackProblem(profits = [6, 5, 8, 9, 6, 7, 3], weights = [2, 3, 6, 7, 5, 9, 4], capacity = 9)
 }
+
+
+
+
+class GenerateKnapsackProblemInstances:
+
+    def generate_random_kp_instance_for_capacity_ratio_and_maximum_value(size: int, desired_capacity_ratio: float, maximum_value: int):
+        
+        def adjust_weights(weights: List[int], capacity: int):
+            for idx in range(len(weights)):
+                if weights[idx] > capacity:
+                    weights[idx] = random.randint(1, capacity)
+            missing_difference = int(1/desired_capacity_ratio * capacity) - sum(weights[:-1])
+            weights = [weight + int(np.ceil(missing_difference / size)) for weight in weights]
+            if len([weight for weight in weights if weight > capacity]) > 0:
+                weights = adjust_weights(weights, capacity)
+            return weights
+        
+        profits = [random.randint(1, maximum_value) for _ in range(size)]
+        weights = [random.randint(1, maximum_value) for _ in range(size)]
+        capacity = int(np.ceil(desired_capacity_ratio * sum(weights)))
+        weights = adjust_weights(weights, capacity)
+        
+        return KnapsackProblem(profits, weights, capacity)
+    
+
+
+
+def main():
+    generated_random_kp_instance = GenerateKnapsackProblemInstances.generate_random_kp_instance_for_capacity_ratio_and_maximum_value(size = 1000, desired_capacity_ratio = 0.01, maximum_value = 1000)
+    print(generated_random_kp_instance)
+    print(generated_random_kp_instance.capacity / sum(generated_random_kp_instance.weights))
+
+
+if __name__ == "__main__":
+    main()
+        
+
