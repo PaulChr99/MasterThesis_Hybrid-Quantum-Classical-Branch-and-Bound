@@ -1,0 +1,12 @@
+Number of qubits: 14 
+Profits: [6, 3, 2, 4, 3, 6, 4, 2, 2, 7] 
+Weights: [6, 3, 9, 2, 2, 4, 10, 5, 7, 5] 
+Capacity: 11 
+Capacity ratio [capacity/sum(weights)]: 0.25 
+Maximum value for profits & weights: 10 
+Number of qubits: 15 
+Profits: [1, 9, 2, 4, 1, 10, 7, 3, 3, 6] 
+Weights: [12, 4, 10, 12, 3, 9, 6, 4, 11, 11] 
+Capacity: 16 
+Capacity ratio [capacity/sum(weights)]: 0.25 
+Maximum value for profits & weights: 10 
